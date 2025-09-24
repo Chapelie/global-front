@@ -37,14 +37,41 @@ const livraisonsEnAttente = computed(() => livraisons.value.filter(l => l.statut
 const livraisonsEnCours = computed(() => livraisons.value.filter(l => l.statut === 'en_cours').length)
 const livraisonsLivre = computed(() => livraisons.value.filter(l => l.statut === 'livre').length)
 
-// Computed pour filtrer les livraisons non terminées
+// Computed pour vérifier si une livraison est complètement livrée
+const isLivraisonComplete = (livraison: Livraison) => {
+  return livraison.produits.every(produit => {
+    const quantiteCommandee = produit.quantiteCommandee || produit.quantite || 0
+    const quantiteLivree = produit.quantiteLivree || 0
+    return quantiteLivree >= quantiteCommandee
+  })
+}
+
+// Computed pour filtrer les livraisons non terminées (en cours ou partielles)
 const livraisonsNonTerminees = computed(() => {
-  return livraisons.value.filter(l => l.statut !== 'livre' && l.statut !== 'annule')
+  return livraisons.value.filter(l => {
+    // Une livraison reste "non terminée" si :
+    // 1. Son statut n'est pas 'livre' ou 'annule'
+    // 2. OU si elle n'est pas complètement livrée même avec statut 'livre'
+    if (l.statut === 'annule') return false
+    if (l.statut !== 'livre') return true
+    return !l.cloturee && !isLivraisonComplete(l)
+  })
 })
 
-// Computed pour filtrer les livraisons terminées
+// Computed pour filtrer les livraisons terminées (complètement livrées ou clôturées)
 const livraisonsTerminees = computed(() => {
-  return livraisons.value.filter(l => l.statut === 'livre' || l.statut === 'annule')
+  return livraisons.value.filter(l => {
+    // Une livraison est "terminée" si :
+    // 1. Elle est annulée
+    // 2. OU elle est marquée comme clôturée
+    // 3. OU elle est complètement livrée ET son statut est 'livre'
+    return l.statut === 'annule' || l.cloturee || (l.statut === 'livre' && isLivraisonComplete(l))
+  })
+})
+
+// Computed pour les produits disponibles avec stock
+const produitsDisponibles = computed(() => {
+  return storageService.getStock().filter(article => article.stock > 0)
 })
 
 // Méthodes
@@ -91,6 +118,29 @@ const removeProduit = (index: number) => {
 }
 
 const saveLivraison = () => {
+  // Vérification de stock avant de sauvegarder la livraison
+  const stock = storageService.getStock()
+  const produitsIndisponibles: string[] = []
+
+  newLivraison.value.produits.forEach(produit => {
+    const articleStock = stock.find(article => article.nom === produit.nom)
+    if (!articleStock) {
+      produitsIndisponibles.push(`${produit.nom} (article inexistant)`)
+    } else if (articleStock.stock < (produit.quantite || produit.quantiteCommandee || 0)) {
+      const quantiteDemandee = produit.quantite || produit.quantiteCommandee || 0
+      produitsIndisponibles.push(`${produit.nom} (stock: ${articleStock.stock}, demandé: ${quantiteDemandee})`)
+    }
+  })
+
+  if (produitsIndisponibles.length > 0) {
+    const message = produitsIndisponibles.length === 1 ?
+      `Le produit suivant n'est pas disponible en stock :\n\n${produitsIndisponibles[0]}` :
+      `Les produits suivants ne sont pas disponibles en stock :\n\n${produitsIndisponibles.join('\n')}`
+
+    alert(message)
+    return
+  }
+
   if (editingLivraison.value) {
     // Modifier une livraison existante
     const index = livraisons.value.findIndex(l => l.id === editingLivraison.value!.id)
@@ -107,12 +157,37 @@ const saveLivraison = () => {
     })
     livraisons.value.push(livraison)
   }
-  
+
   closeModal()
   loadLivraisons()
 }
 
 const commencerLivraison = (livraison: Livraison) => {
+  // Vérification de stock avant de commencer la livraison
+  const stock = storageService.getStock()
+  const produitsIndisponibles: string[] = []
+
+  livraison.produits.forEach(produit => {
+    const articleStock = stock.find(article => article.nom === produit.nom)
+    if (!articleStock) {
+      produitsIndisponibles.push(`${produit.nom} (article inexistant)`)
+    } else {
+      const quantiteDemandee = produit.quantite || produit.quantiteCommandee || 0
+      if (articleStock.stock < quantiteDemandee) {
+        produitsIndisponibles.push(`${produit.nom} (stock: ${articleStock.stock}, demandé: ${quantiteDemandee})`)
+      }
+    }
+  })
+
+  if (produitsIndisponibles.length > 0) {
+    const message = produitsIndisponibles.length === 1 ?
+      `Le produit suivant n'est pas disponible en stock pour cette livraison :\n\n${produitsIndisponibles[0]}\n\nVeuillez vérifier les stocks avant de commencer la livraison.` :
+      `Les produits suivants ne sont pas disponibles en stock pour cette livraison :\n\n${produitsIndisponibles.join('\n')}\n\nVeuillez vérifier les stocks avant de commencer la livraison.`
+
+    alert(message)
+    return
+  }
+
   selectedLivraison.value = livraison
   showSignatureModal.value = true
 }
@@ -125,6 +200,14 @@ const closeSignatureModal = () => {
 const saveLivraisonWithSignature = (livraisonMiseAJour: Livraison) => {
   const index = livraisons.value.findIndex(l => l.id === livraisonMiseAJour.id)
   if (index !== -1) {
+    // Calculer si la livraison est complète
+    const isComplete = isLivraisonComplete(livraisonMiseAJour)
+
+    // Mettre à jour automatiquement le statut si complètement livrée
+    if (isComplete && livraisonMiseAJour.statut !== 'livre') {
+      livraisonMiseAJour.statut = 'livre'
+    }
+
     livraisons.value[index] = livraisonMiseAJour
     storageService.saveLivraisons(livraisons.value)
   }
@@ -132,9 +215,202 @@ const saveLivraisonWithSignature = (livraisonMiseAJour: Livraison) => {
   loadLivraisons()
 }
 
+// Nouvelle méthode pour clôturer manuellement une livraison
+const cloturerLivraison = (livraison: Livraison) => {
+  const produitsNonLivres = livraison.produits.filter(produit => {
+    const quantiteCommandee = produit.quantiteCommandee || produit.quantite || 0
+    const quantiteLivree = produit.quantiteLivree || 0
+    return quantiteLivree < quantiteCommandee
+  })
+
+  let message = 'Êtes-vous sûr de vouloir clôturer cette livraison ?'
+
+  if (produitsNonLivres.length > 0) {
+    message += `\n\nAttention : ${produitsNonLivres.length} produit(s) ne sont pas complètement livrés :`
+    produitsNonLivres.forEach(produit => {
+      const quantiteCommandee = produit.quantiteCommandee || produit.quantite || 0
+      const quantiteLivree = produit.quantiteLivree || 0
+      const restant = quantiteCommandee - quantiteLivree
+      message += `\n- ${produit.nom}: ${restant} ${produit.unite} restant(s)`
+    })
+  }
+
+  if (confirm(message)) {
+    const index = livraisons.value.findIndex(l => l.id === livraison.id)
+    if (index !== -1) {
+      livraisons.value[index] = {
+        ...livraison,
+        cloturee: true,
+        statut: 'livre',
+        dateClotureManuelle: new Date().toISOString(),
+        notesCloture: produitsNonLivres.length > 0 ? 'Clôturée avec livraison partielle' : 'Clôturée manuellement'
+      }
+      storageService.saveLivraisons(livraisons.value)
+      loadLivraisons()
+      alert('Livraison clôturée avec succès')
+    }
+  }
+}
+
+// Méthode pour rouvrir une livraison clôturée
+const rouvrirLivraison = (livraison: Livraison) => {
+  if (confirm('Êtes-vous sûr de vouloir rouvrir cette livraison ?')) {
+    const index = livraisons.value.findIndex(l => l.id === livraison.id)
+    if (index !== -1) {
+      livraisons.value[index] = {
+        ...livraison,
+        cloturee: false,
+        statut: 'en_cours',
+        dateClotureManuelle: undefined,
+        notesCloture: undefined
+      }
+      storageService.saveLivraisons(livraisons.value)
+      loadLivraisons()
+      alert('Livraison rouverte avec succès')
+    }
+  }
+}
+
+// Méthode pour calculer le pourcentage de livraison
+const getPourcentageLivraison = (livraison: Livraison) => {
+  if (!livraison.produits.length) return 0
+
+  const totalCommandee = livraison.produits.reduce((sum, produit) => {
+    return sum + (produit.quantiteCommandee || produit.quantite || 0)
+  }, 0)
+
+  const totalLivree = livraison.produits.reduce((sum, produit) => {
+    return sum + (produit.quantiteLivree || 0)
+  }, 0)
+
+  return totalCommandee > 0 ? Math.round((totalLivree / totalCommandee) * 100) : 0
+}
+
 const telechargerBL = (livraison: Livraison) => {
   selectedBordereauLivraison.value = livraison
   showBordereauModal.value = true
+}
+
+const telechargerBordereauTransfert = (livraison: Livraison) => {
+  // Ouvrir une nouvelle fenêtre pour imprimer le bordereau de transfert
+  const printWindow = window.open('', '_blank')
+  if (printWindow) {
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Bordereau de Transfert - ${livraison.numeroBL}</title>
+          <style>
+            body { font-family: Arial, sans-serif; margin: 0; padding: 20px; }
+            .transfert-bordereau { max-width: 800px; margin: 0 auto; }
+            .bl-header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 3px solid #f97316; padding-bottom: 20px; margin-bottom: 30px; }
+            .company-info { display: flex; align-items: flex-start; gap: 20px; }
+            .logo-image { width: 80px; height: 80px; object-fit: contain; border: 2px solid #f97316; border-radius: 8px; }
+            .company-name { font-size: 24px; font-weight: bold; color: #f97316; margin: 0 0 15px 0; text-transform: uppercase; }
+            .company-address { font-size: 14px; color: #374151; line-height: 1.6; }
+            .bordereau-title { font-size: 20px; font-weight: bold; color: #1f2937; margin: 0 0 15px 0; text-transform: uppercase; }
+            .client-info { background: #f9fafb; padding: 20px; border-radius: 8px; margin-bottom: 30px; border-left: 4px solid #f97316; }
+            .products-table { width: 100%; border-collapse: collapse; margin-bottom: 20px; border: 1px solid #d1d5db; }
+            .products-table th { background: #f97316; color: white; padding: 12px; text-align: left; font-weight: bold; }
+            .products-table td { padding: 12px; border-bottom: 1px solid #e5e7eb; }
+            .signatures-section { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin: 40px 0; padding: 20px 0; border-top: 2px solid #e5e7eb; }
+            .signature-box { text-align: center; }
+            .signature-line { border: 1px solid #d1d5db; padding: 20px; min-height: 100px; background: #f9fafb; }
+            @media print { body { margin: 0; } }
+          </style>
+        </head>
+        <body>
+          <div class="transfert-bordereau">
+            <div class="bl-header">
+              <div class="company-info">
+                <div class="company-logo">
+                  <img src="/logo.jpg" alt="Global Star Distribution" class="logo-image" />
+                </div>
+                <div class="company-details">
+                  <h1 class="company-name">GLOBAL STAR DISTRIBUTION</h1>
+                  <div class="company-address">
+                    <p><strong>Numéro d'entreprise :</strong> 6201798/51747100</p>
+                    <p><strong>Adresse :</strong> Yimdi route de Bobo, 300 m avant le péage</p>
+                    <p><strong>Email :</strong> gelil.Savadogo@yahoo.com</p>
+                  </div>
+                </div>
+              </div>
+              
+              <div class="bordereau-info">
+                <h2 class="bordereau-title">BORDEREAU DE TRANSFERT</h2>
+                <div class="bordereau-details">
+                  <p><strong>Date :</strong> ${new Date(livraison.date).toLocaleDateString('fr-FR', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
+                  <p><strong>N° Bordereau :</strong> ${livraison.numeroBL}</p>
+                  ${livraison.codeSuivi ? `<p><strong>Code de suivi :</strong> ${livraison.codeSuivi}</p>` : ''}
+                </div>
+              </div>
+            </div>
+
+            <div class="client-info">
+              <h3>INFORMATIONS CLIENT</h3>
+              <div class="client-details">
+                <p><strong>Nom :</strong> ${livraison.client}</p>
+                ${livraison.telephone ? `<p><strong>Téléphone :</strong> ${livraison.telephone}</p>` : ''}
+                ${livraison.adresse ? `<p><strong>Adresse :</strong> ${livraison.adresse}</p>` : ''}
+              </div>
+            </div>
+
+            <div class="products-section">
+              <h3>DÉTAIL DU TRANSFERT</h3>
+              <table class="products-table">
+                <thead>
+                  <tr>
+                    <th>Désignation</th>
+                    <th>Quantité</th>
+                    <th>Observation</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${livraison.produits.map(produit => `
+                    <tr>
+                      <td>${produit.nom}</td>
+                      <td style="text-align: center;">${produit.quantite} ${produit.unite}</td>
+                      <td>${produit.observation || '-'}</td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table>
+              
+              <div class="total-section" style="text-align: right; margin-top: 20px; padding: 15px; background: #fef3c7; border-radius: 8px; border: 2px solid #f59e0b;">
+                <p style="font-size: 16px; color: #92400e; margin: 0;"><strong>TOTAL : ${livraison.produits.reduce((total, produit) => total + produit.quantite, 0)} articles</strong></p>
+              </div>
+            </div>
+
+            <div class="signatures-section">
+              <div class="signature-box">
+                <h4>CHAUFFEUR</h4>
+                <div class="signature-line">
+                  <p>Nom : _________________________</p>
+                  <p>Signature : _________________________</p>
+                  <p>Date : _________________________</p>
+                </div>
+              </div>
+              
+              <div class="signature-box">
+                <h4>CLIENT</h4>
+                <div class="signature-line">
+                  <p>Nom : _________________________</p>
+                  <p>Signature : _________________________</p>
+                  <p>Date : _________________________</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </body>
+      </html>
+    `)
+    printWindow.document.close()
+    printWindow.focus()
+    
+    setTimeout(() => {
+      printWindow.print()
+    }, 500)
+  }
 }
 
 const closeBordereauModal = () => {
@@ -142,33 +418,40 @@ const closeBordereauModal = () => {
   selectedBordereauLivraison.value = null
 }
 
-const getStatusClass = (statut: string) => {
-  switch (statut) {
-    case 'en_attente':
-      return 'bg-yellow-100 text-yellow-800'
-    case 'en_cours':
-      return 'bg-blue-100 text-blue-800'
-    case 'livre':
-      return 'bg-green-100 text-green-800'
-    case 'annule':
-      return 'bg-red-100 text-red-800'
-    default:
-      return 'bg-gray-100 text-gray-800'
-  }
-}
 
-const getStatusText = (statut: string) => {
+const getStatusText = (statut: string, livraison?: Livraison) => {
   switch (statut) {
     case 'en_attente':
       return 'En attente'
     case 'en_cours':
       return 'En cours'
     case 'livre':
-      return 'Livré'
+      if (livraison?.cloturee) {
+        return 'Clôturée'
+      }
+      return isLivraisonComplete(livraison!) ? 'Livré complet' : 'Livré partiel'
     case 'annule':
       return 'Annulé'
     default:
       return statut
+  }
+}
+
+const getStatusClass = (statut: string, livraison?: Livraison) => {
+  switch (statut) {
+    case 'en_attente':
+      return 'bg-yellow-100 text-yellow-800'
+    case 'en_cours':
+      return 'bg-blue-100 text-blue-800'
+    case 'livre':
+      if (livraison?.cloturee) {
+        return 'bg-purple-100 text-purple-800'
+      }
+      return isLivraisonComplete(livraison!) ? 'bg-green-100 text-green-800' : 'bg-orange-100 text-orange-800'
+    case 'annule':
+      return 'bg-red-100 text-red-800'
+    default:
+      return 'bg-gray-100 text-gray-800'
   }
 }
 
@@ -180,18 +463,26 @@ onMounted(() => {
 
 <template>
   <div class="livraison-container">
-    <!-- Header -->
+    <!-- Header amélioré -->
     <div class="livraison-header">
       <div class="header-content">
         <div class="header-main">
-          <div>
-            <h1 class="page-title">Gestion des Livraisons</h1>
+          <div class="flex items-center">
+            <div class="h-12 w-12 rounded-2xl bg-gradient-to-br from-green-500 to-emerald-500 flex items-center justify-center mr-4">
+              <svg class="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+              </svg>
+            </div>
+            <div>
+              <h1 class="page-title">Gestion des Livraisons</h1>
+              <p class="page-subtitle">Suivi des expéditions et gestion des bordereaux</p>
+            </div>
           </div>
           <button
             @click="openModal()"
-            class="btn btn-primary"
+            class="inline-flex items-center px-6 py-3 bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white font-semibold rounded-2xl transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
           >
-            <svg class="btn-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
             </svg>
             Nouvelle livraison
@@ -308,10 +599,25 @@ onMounted(() => {
                   <div class="livraison-main">
                     <div class="livraison-header-info">
                       <span class="status-badge"
-                            :class="getStatusClass(livraison.statut)">
-                        {{ getStatusText(livraison.statut) }}
+                            :class="getStatusClass(livraison.statut, livraison)">
+                        {{ getStatusText(livraison.statut, livraison) }}
                       </span>
                       <span class="livraison-number">#{{ livraison.numeroBL }}</span>
+                      <!-- Pourcentage de livraison -->
+                      <div class="flex items-center space-x-2">
+                        <div class="w-16 bg-gray-200 rounded-full h-2">
+                          <div
+                            class="h-2 rounded-full transition-all duration-500"
+                            :class="{
+                              'bg-green-500': getPourcentageLivraison(livraison) === 100,
+                              'bg-orange-500': getPourcentageLivraison(livraison) > 0 && getPourcentageLivraison(livraison) < 100,
+                              'bg-gray-400': getPourcentageLivraison(livraison) === 0
+                            }"
+                            :style="{ width: `${getPourcentageLivraison(livraison)}%` }"
+                          ></div>
+                        </div>
+                        <span class="text-xs font-medium text-gray-600">{{ getPourcentageLivraison(livraison) }}%</span>
+                      </div>
                     </div>
                     
                     <h4 class="livraison-client">{{ livraison.client }}</h4>
@@ -342,8 +648,25 @@ onMounted(() => {
                               {{ produit.quantiteCommandee || produit.quantite }} {{ produit.unite }}
                             </span>
                             <span class="quantite-arrow">→</span>
-                            <span class="quantite-livree">
+                            <span class="quantite-livree" :class="{
+                              'text-green-600 font-bold': (produit.quantiteLivree || 0) >= (produit.quantiteCommandee || produit.quantite || 0),
+                              'text-orange-600 font-bold': (produit.quantiteLivree || 0) > 0 && (produit.quantiteLivree || 0) < (produit.quantiteCommandee || produit.quantite || 0),
+                              'text-red-600': (produit.quantiteLivree || 0) === 0
+                            }">
                               {{ produit.quantiteLivree || 0 }} {{ produit.unite }}
+                            </span>
+                            <!-- Indicateur de statut produit -->
+                            <span v-if="(produit.quantiteLivree || 0) >= (produit.quantiteCommandee || produit.quantite || 0)"
+                                  class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                              ✓ Complet
+                            </span>
+                            <span v-else-if="(produit.quantiteLivree || 0) > 0"
+                                  class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
+                              Partiel
+                            </span>
+                            <span v-else
+                                  class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                              Non livré
                             </span>
                           </div>
                         </div>
@@ -352,16 +675,42 @@ onMounted(() => {
                   </div>
 
                   <div class="livraison-actions">
+                    <!-- Actions selon le statut -->
                     <button
+                      v-if="livraison.statut === 'en_attente'"
                       @click="commencerLivraison(livraison)"
                       class="btn btn-primary"
                     >
                       <svg class="btn-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
                       </svg>
-                      Commencer la livraison
+                      Commencer
                     </button>
-                    
+
+                    <button
+                      v-if="livraison.statut === 'en_cours'"
+                      @click="commencerLivraison(livraison)"
+                      class="btn btn-primary"
+                    >
+                      <svg class="btn-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                      </svg>
+                      Continuer livraison
+                    </button>
+
+                    <!-- Bouton clôturer si pas complètement livré -->
+                    <button
+                      v-if="!livraison.cloturee && !isLivraisonComplete(livraison) && livraison.statut !== 'en_attente'"
+                      @click="cloturerLivraison(livraison)"
+                      class="btn bg-purple-500 hover:bg-purple-600 text-white"
+                      title="Clôturer manuellement cette livraison"
+                    >
+                      <svg class="btn-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      Clôturer
+                    </button>
+
                     <button
                       @click="openModal(livraison)"
                       class="btn btn-secondary"
@@ -402,10 +751,14 @@ onMounted(() => {
                   <div class="livraison-main">
                     <div class="livraison-header-info">
                       <span class="status-badge"
-                            :class="getStatusClass(livraison.statut)">
-                        {{ getStatusText(livraison.statut) }}
+                            :class="getStatusClass(livraison.statut, livraison)">
+                        {{ getStatusText(livraison.statut, livraison) }}
                       </span>
                       <span class="livraison-number">#{{ livraison.numeroBL }}</span>
+                      <!-- Affichage spécial pour les livraisons clôturées -->
+                      <div v-if="livraison.cloturee" class="text-xs text-purple-600 font-medium">
+                        Clôturée le {{ livraison.dateClotureManuelle ? new Date(livraison.dateClotureManuelle).toLocaleDateString('fr-FR') : 'N/A' }}
+                      </div>
                     </div>
                     
                     <h4 class="livraison-client">{{ livraison.client }}</h4>
@@ -456,13 +809,26 @@ onMounted(() => {
 
                   <div class="livraison-actions">
                     <button
-                      @click="telechargerBL(livraison)"
+                      @click="telechargerBordereauTransfert(livraison)"
                       class="btn btn-secondary"
                     >
                       <svg class="btn-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                       </svg>
-                      Télécharger BL
+                      Bordereau de Transfert
+                    </button>
+
+                    <!-- Bouton pour rouvrir une livraison clôturée -->
+                    <button
+                      v-if="livraison.cloturee"
+                      @click="rouvrirLivraison(livraison)"
+                      class="btn bg-blue-500 hover:bg-blue-600 text-white"
+                      title="Rouvrir cette livraison"
+                    >
+                      <svg class="btn-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
+                      </svg>
+                      Rouvrir
                     </button>
                   </div>
                 </div>
@@ -567,13 +933,20 @@ onMounted(() => {
                   :key="index"
                   class="produit-form-row"
                 >
-                  <input
+                  <select
                     v-model="produit.nom"
-                    type="text"
-                    placeholder="Nom du produit"
                     required
                     class="form-input"
-                  />
+                  >
+                    <option value="">Sélectionner un produit</option>
+                    <option
+                      v-for="article in produitsDisponibles"
+                      :key="article.id"
+                      :value="article.nom"
+                    >
+                      {{ article.nom }} (Stock: {{ article.stock }})
+                    </option>
+                  </select>
                   <input
                     v-model.number="produit.quantite"
                     type="number"
@@ -625,33 +998,35 @@ onMounted(() => {
 </template>
 
 <style scoped>
-/* Layout principal */
+/* Layout principal amélioré */
 .livraison-container {
   min-height: 100vh;
   background-color: #f9fafb;
 }
 
 .livraison-header {
-  background-color: #ffffff;
-  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
-  border-bottom: 1px solid #e5e7eb;
+  background: linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 100%);
+  border: 1px solid #bbf7d0;
+  border-radius: 1.5rem;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  margin-bottom: 2rem;
 }
 
 .header-content {
   max-width: 80rem;
   margin: 0 auto;
-  padding: 0 1rem;
+  padding: 2rem 1rem;
 }
 
 @media (min-width: 640px) {
   .header-content {
-    padding: 0 1.5rem;
+    padding: 2rem 1.5rem;
   }
 }
 
 @media (min-width: 1024px) {
   .header-content {
-    padding: 0 2rem;
+    padding: 2rem 2rem;
   }
 }
 
@@ -659,40 +1034,42 @@ onMounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 1.5rem 0;
+  flex-wrap: wrap;
+  gap: 1.5rem;
 }
 
 .page-title {
-  font-size: 1.875rem;
-  font-weight: 700;
+  font-size: 2.25rem;
+  font-weight: 800;
   color: #111827;
+  margin-bottom: 0.5rem;
 }
 
 .page-subtitle {
-  margin-top: 0.5rem;
-  font-size: 0.875rem;
+  font-size: 1rem;
   color: #6b7280;
+  font-weight: 500;
 }
 
 .main-content {
   max-width: 80rem;
   margin: 0 auto;
-  padding: 2rem 1rem;
+  padding: 0 1rem;
 }
 
 @media (min-width: 640px) {
   .main-content {
-    padding: 2rem 1.5rem;
+    padding: 0 1.5rem;
   }
 }
 
 @media (min-width: 1024px) {
   .main-content {
-    padding: 2rem 2rem;
+    padding: 0 2rem;
   }
 }
 
-/* Statistiques */
+/* Statistiques améliorées */
 .stats-grid {
   display: grid;
   grid-template-columns: 1fr;
@@ -707,14 +1084,21 @@ onMounted(() => {
 }
 
 .stat-card {
-  background-color: #ffffff;
+  background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
   overflow: hidden;
-  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
-  border-radius: 0.5rem;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  border-radius: 1.5rem;
+  border: 1px solid #e2e8f0;
+  transition: all 0.3s ease;
+}
+
+.stat-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
 }
 
 .stat-content {
-  padding: 1.25rem;
+  padding: 1.5rem;
 }
 
 .stat-icon-wrapper {
@@ -769,12 +1153,13 @@ onMounted(() => {
   color: #111827;
 }
 
-/* Onglets */
+/* Onglets améliorés */
 .tabs-container {
-  background-color: #ffffff;
-  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
-  border-radius: 0.5rem;
+  background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  border-radius: 1.5rem;
   margin-bottom: 2rem;
+  border: 1px solid #e2e8f0;
 }
 
 .tabs-header {
@@ -859,23 +1244,26 @@ onMounted(() => {
   color: #6b7280;
 }
 
-/* Liste des livraisons */
+/* Liste des livraisons améliorée */
 .livraison-list {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: 1.5rem;
 }
 
 .livraison-card {
-  background-color: #ffffff;
-  border: 1px solid #e5e7eb;
-  border-radius: 0.5rem;
-  padding: 1.5rem;
-  transition: box-shadow 0.2s ease-in-out;
+  background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+  border: 1px solid #e2e8f0;
+  border-radius: 1.5rem;
+  padding: 2rem;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
 }
 
 .livraison-card:hover {
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+  transform: translateY(-4px);
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  border-color: #10b981;
 }
 
 .livraison-content {
@@ -1057,22 +1445,24 @@ onMounted(() => {
   gap: 0.5rem;
 }
 
-/* Boutons */
+/* Boutons améliorés */
 .btn {
   display: inline-flex;
   align-items: center;
-  padding: 0.5rem 1rem;
+  padding: 0.75rem 1.25rem;
   border: none;
-  border-radius: 0.5rem;
+  border-radius: 1rem;
   font-size: 0.875rem;
-  font-weight: 500;
+  font-weight: 600;
   cursor: pointer;
-  transition: all 0.2s ease-in-out;
+  transition: all 0.3s ease;
   text-decoration: none;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
 }
 
 .btn:hover {
-  transform: translateY(-1px);
+  transform: translateY(-2px);
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
 }
 
 .btn-icon {
@@ -1082,22 +1472,24 @@ onMounted(() => {
 }
 
 .btn-primary {
-  background-color: #f97316;
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
   color: #ffffff;
 }
 
 .btn-primary:hover {
-  background-color: #ea580c;
+  background: linear-gradient(135deg, #059669 0%, #047857 100%);
 }
 
 .btn-secondary {
-  background-color: #ffffff;
+  background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
   color: #374151;
   border: 1px solid #d1d5db;
 }
 
 .btn-secondary:hover {
-  background-color: #f9fafb;
+  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+  border-color: #10b981;
+  color: #10b981;
 }
 
 /* Modal */

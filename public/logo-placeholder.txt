@@ -1,0 +1,8 @@
+Ce fichier est un placeholder pour le logo.
+
+Pour personnaliser le logo de votre application :
+
+1. Remplacez le fichier src/assets/logo.jpeg par votre logo
+2. Ou utilisez le composable useLogo() dans vos composants
+
+Le logo sera automatiquement importé depuis src/assets/logo.jpeg

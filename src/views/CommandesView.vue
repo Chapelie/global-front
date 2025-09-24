@@ -1,16 +1,21 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { storageService, type Commande } from '../services/storage'
-import { 
-  PlusIcon, 
-  PencilIcon, 
+import {
+  PlusIcon,
+  PencilIcon,
   TrashIcon,
   CalendarIcon,
   ClockIcon,
   ShoppingCartIcon,
   TruckIcon,
   CheckCircleIcon,
-  ExclamationTriangleIcon
+  ExclamationTriangleIcon,
+  UserGroupIcon,
+  DocumentTextIcon,
+  CurrencyDollarIcon,
+  ArrowUpIcon,
+  ArrowDownIcon
 } from '@heroicons/vue/24/outline'
 
 const commandes = ref<Commande[]>([])
@@ -56,14 +61,15 @@ const statutsLivraison = [
   { value: 'livre', label: 'Livré', color: 'bg-green-100 text-green-800', icon: CheckCircleIcon }
 ]
 
-const produits = [
-  'Briques standard',
-  'Briques creuses',
-  'Briques pleines',
-  'Ciment Portland',
-  'Palettes',
-  'Granit'
-]
+// Obtenir les produits disponibles depuis le stock
+const produitsDisponibles = computed(() => {
+  return storageService.getStock().map(article => ({
+    nom: article.nom,
+    stock: article.stock,
+    unite: article.unite,
+    prix: article.prix
+  }))
+})
 
 const priorites = [
   { value: 'basse', label: 'Basse', color: 'bg-gray-100 text-gray-800' },
@@ -97,19 +103,42 @@ const openModal = (commande?: Commande) => {
 }
 
 const saveCommande = () => {
+  // Vérifier la disponibilité en stock pour chaque produit
+  const stock = storageService.getStock()
+  const produitsIndisponibles: string[] = []
+
+  newCommande.value.produits.forEach(produit => {
+    const articleStock = stock.find(article => article.nom === produit.nom)
+    if (!articleStock) {
+      produitsIndisponibles.push(`${produit.nom} (article inexistant)`)
+    } else if (articleStock.stock < produit.quantite) {
+      produitsIndisponibles.push(`${produit.nom} (stock: ${articleStock.stock}, demandé: ${produit.quantite})`)
+    }
+  })
+
+  if (produitsIndisponibles.length > 0) {
+    alert(`Stock insuffisant pour:\n${produitsIndisponibles.join('\n')}\n\nVeuillez ajuster les quantités ou vérifier le stock disponible.`)
+    return
+  }
+
   const commandeData = {
     ...newCommande.value,
     date: new Date().toISOString().split('T')[0]
   }
-  
-  if (editingCommande.value) {
-    storageService.updateCommande(editingCommande.value.id, commandeData)
-  } else {
-    storageService.addCommande(commandeData)
+
+  try {
+    if (editingCommande.value) {
+      storageService.updateCommande(editingCommande.value.id, commandeData)
+    } else {
+      storageService.addCommande(commandeData)
+    }
+    loadCommandes()
+    showModal.value = false
+    editingCommande.value = null
+    alert('Commande enregistrée avec succès!')
+  } catch (error) {
+    alert(`Erreur lors de la sauvegarde: ${error}`)
   }
-  loadCommandes()
-  showModal.value = false
-  editingCommande.value = null
 }
 
 // Fonctions utilitaires pour l'affichage des états de livraison
@@ -136,13 +165,57 @@ const deleteCommande = (id: number) => {
 }
 
 const confirmerCommande = (commande: Commande) => {
+  // Vérifier le stock avant de confirmer
+  const stock = storageService.getStock()
+  const produitsIndisponibles: string[] = []
+
+  commande.produits.forEach(produit => {
+    const articleStock = stock.find(article => article.nom === produit.nom)
+    if (!articleStock) {
+      produitsIndisponibles.push(`${produit.nom} (article inexistant)`)
+    } else if (articleStock.stock < produit.quantite) {
+      produitsIndisponibles.push(`${produit.nom} (stock: ${articleStock.stock}, demandé: ${produit.quantite})`)
+    }
+  })
+
+  if (produitsIndisponibles.length > 0) {
+    alert(`Impossible de confirmer la commande. Stock insuffisant pour:\n${produitsIndisponibles.join('\n')}`)
+    return
+  }
+
   storageService.updateCommande(commande.id, { statut: 'confirmee' })
   loadCommandes()
+  alert('Commande confirmée avec succès!')
+}
+
+// Obtenir les informations de stock pour un produit
+const getStockInfo = (nomProduit: string) => {
+  const stock = storageService.getStock()
+  return stock.find(article => article.nom === nomProduit)
 }
 
 const preparerCommande = (commande: Commande) => {
+  // Vérifier le stock avant de préparer
+  const stock = storageService.getStock()
+  const produitsIndisponibles: string[] = []
+
+  commande.produits.forEach(produit => {
+    const articleStock = stock.find(article => article.nom === produit.nom)
+    if (!articleStock) {
+      produitsIndisponibles.push(`${produit.nom} (article inexistant)`)
+    } else if (articleStock.stock < produit.quantite) {
+      produitsIndisponibles.push(`${produit.nom} (stock: ${articleStock.stock}, demandé: ${produit.quantite})`)
+    }
+  })
+
+  if (produitsIndisponibles.length > 0) {
+    alert(`Impossible de préparer la commande. Stock insuffisant pour:\n${produitsIndisponibles.join('\n')}`)
+    return
+  }
+
   storageService.updateCommande(commande.id, { statut: 'en_preparation' })
   loadCommandes()
+  alert('Commande mise en préparation!')
 }
 
 const creerLivraison = (commande: Commande) => {
@@ -224,129 +297,160 @@ const commandesLivrees = computed(() => commandes.value.filter(c => c.statutGlob
 </script>
 
 <template>
-  <div class="space-y-6">
-    <!-- En-tête -->
-    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between">
-      <div>
-        <h2 class="text-2xl font-bold text-gray-900">Commandes Clients</h2>
-        <p class="mt-2 text-gray-600">Gestion des commandes et génération des livraisons</p>
+  <div class="commandes-container">
+    <!-- Header moderne -->
+    <div class="commandes-header">
+      <div class="header-content">
+        <div class="header-main">
+          <div class="flex items-center">
+            <div class="h-12 w-12 rounded-2xl bg-gradient-to-br from-orange-500 to-amber-500 flex items-center justify-center mr-4 shadow-lg">
+              <ShoppingCartIcon class="h-6 w-6 text-white" />
+            </div>
+            <div>
+              <h1 class="page-title">Commandes Clients</h1>
+              <p class="page-subtitle">Gestion des commandes et génération des livraisons</p>
+            </div>
+          </div>
+          <div class="flex items-center space-x-4">
+            <button
+              @click="openModal()"
+              class="action-button"
+            >
+              <PlusIcon class="h-5 w-5 mr-2" />
+              Nouvelle commande
+            </button>
+          </div>
+        </div>
       </div>
-      <button
-        @click="openModal()"
-        class="mt-4 sm:mt-0 inline-flex items-center px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white font-medium rounded-xl transition-colors"
-      >
-        <PlusIcon class="h-5 w-5 mr-2" />
-        Nouvelle commande
-      </button>
     </div>
 
-    <!-- Statistiques -->
-    <div class="grid grid-cols-1 sm:grid-cols-4 gap-6">
-      <div class="bg-white rounded-2xl shadow-md p-6 border border-gray-100">
-        <div class="flex items-center">
-          <div class="h-12 w-12 rounded-xl bg-blue-100 flex items-center justify-center">
-            <ShoppingCartIcon class="h-6 w-6 text-blue-600" />
+    <div class="main-content">
+
+    <!-- KPI Cards modernisés -->
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-content">
+          <div class="stat-icon-wrapper stat-blue">
+            <ShoppingCartIcon class="stat-icon" />
           </div>
-          <div class="ml-4">
-            <p class="text-sm font-medium text-gray-600">Total commandes</p>
-            <p class="text-2xl font-bold text-gray-900">{{ totalCommandes }}</p>
+          <div class="stat-details">
+            <dt class="stat-label">Total commandes</dt>
+            <dd class="stat-value">{{ totalCommandes }}</dd>
+            <dd class="stat-unit">commandes</dd>
           </div>
         </div>
       </div>
 
-      <div class="bg-white rounded-2xl shadow-md p-6 border border-gray-100">
-        <div class="flex items-center">
-          <div class="h-12 w-12 rounded-xl bg-yellow-100 flex items-center justify-center">
-            <ClockIcon class="h-6 w-6 text-yellow-600" />
+      <div class="stat-card">
+        <div class="stat-content">
+          <div class="stat-icon-wrapper stat-yellow">
+            <ClockIcon class="stat-icon" />
           </div>
-          <div class="ml-4">
-            <p class="text-sm font-medium text-gray-600">En attente</p>
-            <p class="text-2xl font-bold text-gray-900">{{ commandesEnAttente }}</p>
+          <div class="stat-details">
+            <dt class="stat-label">En attente</dt>
+            <dd class="stat-value">{{ commandesEnAttente }}</dd>
+            <dd class="stat-unit">à traiter</dd>
           </div>
-        </div>
-      </div>
-
-      <div class="bg-white rounded-2xl shadow-md p-6 border border-gray-100">
-        <div class="flex items-center">
-          <div class="h-12 w-12 rounded-xl bg-orange-100 flex items-center justify-center">
-            <CheckCircleIcon class="h-6 w-6 text-orange-600" />
-          </div>
-          <div class="ml-4">
-            <p class="text-sm font-medium text-gray-600">Confirmées</p>
-            <p class="text-2xl font-bold text-gray-900">{{ commandesConfirmees }}</p>
+          <div v-if="commandesEnAttente > 0" class="stat-badge">
+            <ExclamationTriangleIcon class="h-4 w-4 text-yellow-600" />
           </div>
         </div>
       </div>
 
-      <div class="bg-white rounded-2xl shadow-md p-6 border border-gray-100">
-        <div class="flex items-center">
-          <div class="h-12 w-12 rounded-xl bg-green-100 flex items-center justify-center">
-            <TruckIcon class="h-6 w-6 text-green-600" />
+      <div class="stat-card">
+        <div class="stat-content">
+          <div class="stat-icon-wrapper stat-orange">
+            <CheckCircleIcon class="stat-icon" />
           </div>
-          <div class="ml-4">
-            <p class="text-sm font-medium text-gray-600">En préparation</p>
-            <p class="text-2xl font-bold text-gray-900">{{ commandesEnPreparation }}</p>
+          <div class="stat-details">
+            <dt class="stat-label">Confirmées</dt>
+            <dd class="stat-value">{{ commandesConfirmees }}</dd>
+            <dd class="stat-unit">validées</dd>
+          </div>
+        </div>
+      </div>
+
+      <div class="stat-card">
+        <div class="stat-content">
+          <div class="stat-icon-wrapper stat-green">
+            <TruckIcon class="stat-icon" />
+          </div>
+          <div class="stat-details">
+            <dt class="stat-label">En préparation</dt>
+            <dd class="stat-value">{{ commandesEnPreparation }}</dd>
+            <dd class="stat-unit">actives</dd>
           </div>
         </div>
       </div>
     </div>
 
     <!-- Statistiques des états de livraison -->
-    <div class="grid grid-cols-1 sm:grid-cols-3 gap-6">
-      <div class="bg-white rounded-2xl shadow-md p-6 border border-gray-100">
-        <div class="flex items-center">
-          <div class="h-12 w-12 rounded-xl bg-red-100 flex items-center justify-center">
-            <ExclamationTriangleIcon class="h-6 w-6 text-red-600" />
+    <div class="secondary-stats-grid">
+      <div class="secondary-stat-card">
+        <div class="secondary-stat-content">
+          <div class="secondary-stat-icon stat-red">
+            <ExclamationTriangleIcon class="h-5 w-5 text-white" />
           </div>
-          <div class="ml-4">
-            <p class="text-sm font-medium text-gray-600">Non livrées</p>
-            <p class="text-2xl font-bold text-gray-900">{{ commandesNonLivrees }}</p>
-          </div>
-        </div>
-      </div>
-
-      <div class="bg-white rounded-2xl shadow-md p-6 border border-gray-100">
-        <div class="flex items-center">
-          <div class="h-12 w-12 rounded-xl bg-orange-100 flex items-center justify-center">
-            <ClockIcon class="h-6 w-6 text-orange-600" />
-          </div>
-          <div class="ml-4">
-            <p class="text-sm font-medium text-gray-600">Partiellement livrées</p>
-            <p class="text-2xl font-bold text-gray-900">{{ commandesPartiellementLivrees }}</p>
+          <div>
+            <p class="secondary-stat-label">Non livrées</p>
+            <p class="secondary-stat-value">{{ commandesNonLivrees }}</p>
           </div>
         </div>
       </div>
 
-      <div class="bg-white rounded-2xl shadow-md p-6 border border-gray-100">
-        <div class="flex items-center">
-          <div class="h-12 w-12 rounded-xl bg-green-100 flex items-center justify-center">
-            <CheckCircleIcon class="h-6 w-6 text-green-600" />
+      <div class="secondary-stat-card">
+        <div class="secondary-stat-content">
+          <div class="secondary-stat-icon stat-orange">
+            <ClockIcon class="h-5 w-5 text-white" />
           </div>
-          <div class="ml-4">
-            <p class="text-sm font-medium text-gray-600">Livrées</p>
-            <p class="text-2xl font-bold text-gray-900">{{ commandesLivrees }}</p>
+          <div>
+            <p class="secondary-stat-label">Partiellement livrées</p>
+            <p class="secondary-stat-value">{{ commandesPartiellementLivrees }}</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="secondary-stat-card">
+        <div class="secondary-stat-content">
+          <div class="secondary-stat-icon stat-green">
+            <CheckCircleIcon class="h-5 w-5 text-white" />
+          </div>
+          <div>
+            <p class="secondary-stat-label">Livrées complètement</p>
+            <p class="secondary-stat-value">{{ commandesLivrees }}</p>
           </div>
         </div>
       </div>
     </div>
 
-    <!-- Filtres -->
-    <div class="bg-white rounded-2xl shadow-md p-6 border border-gray-100">
-      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between">
-        <h3 class="text-lg font-semibold text-gray-900 mb-4 sm:mb-0">Commandes récentes</h3>
-        <div class="flex items-center space-x-4">
-          <div class="flex items-center">
-            <CalendarIcon class="h-5 w-5 text-gray-400 mr-2" />
+    <!-- Filtres modernisés -->
+    <div class="filters-card">
+      <div class="filters-header">
+        <div class="flex items-center">
+          <div class="h-10 w-10 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center mr-3 shadow-lg">
+            <DocumentTextIcon class="h-5 w-5 text-white" />
+          </div>
+          <div>
+            <h3 class="chart-title">Commandes récentes</h3>
+            <p class="chart-subtitle">Filtres et recherche avancée</p>
+          </div>
+        </div>
+      </div>
+      <div class="filters-content">
+        <div class="filters-row">
+          <div class="filter-item">
+            <CalendarIcon class="filter-icon" />
             <input
               v-model="selectedDate"
               type="date"
-              class="rounded-lg border-gray-300 focus:border-orange-500 focus:ring-orange-500"
+              class="filter-input"
+              placeholder="Filtrer par date"
             />
           </div>
-          <div class="flex items-center">
+          <div class="filter-item">
             <select
               v-model="selectedStatut"
-              class="rounded-lg border-gray-300 focus:border-orange-500 focus:ring-orange-500"
+              class="filter-select"
             >
               <option value="">Tous les statuts</option>
               <option v-for="statut in statuts" :key="statut.value" :value="statut.value">
@@ -354,10 +458,10 @@ const commandesLivrees = computed(() => commandes.value.filter(c => c.statutGlob
               </option>
             </select>
           </div>
-          <div class="flex items-center">
+          <div class="filter-item">
             <select
               v-model="selectedStatutLivraison"
-              class="rounded-lg border-gray-300 focus:border-orange-500 focus:ring-orange-500"
+              class="filter-select"
             >
               <option value="">Tous les états de livraison</option>
               <option v-for="statut in statutsLivraison" :key="statut.value" :value="statut.value">
@@ -369,30 +473,37 @@ const commandesLivrees = computed(() => commandes.value.filter(c => c.statutGlob
       </div>
     </div>
 
-    <!-- Liste des commandes -->
-    <div class="space-y-4">
-      <div 
-        v-for="commande in commandesFiltrees" 
+    <!-- Liste des commandes modernisée -->
+    <div class="commandes-list">
+      <div
+        v-for="commande in commandesFiltrees"
         :key="commande.id"
-        class="bg-white rounded-2xl shadow-md border border-gray-100 p-6"
+        class="commande-card"
       >
-        <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between">
-          <div class="flex-1">
-            <div class="flex items-center justify-between mb-4">
-              <div>
-                <h4 class="text-lg font-semibold text-gray-900">{{ commande.numeroCommande }}</h4>
-                <p class="text-sm text-gray-600">{{ commande.client }}</p>
+        <div class="commande-content">
+          <div class="commande-main">
+            <div class="commande-header">
+              <div class="commande-info">
+                <div class="flex items-center space-x-3 mb-2">
+                  <div class="commande-icon">
+                    <component :is="getStatutInfo(commande.statut).icon" class="h-5 w-5 text-white" />
+                  </div>
+                  <div>
+                    <h4 class="commande-title">{{ commande.numeroCommande }}</h4>
+                    <p class="commande-client">{{ commande.client }}</p>
+                  </div>
+                </div>
               </div>
-              <div class="flex items-center space-x-2">
-                <span 
-                  class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium"
+              <div class="commande-badges">
+                <span
+                  class="status-badge"
                   :class="getStatutInfo(commande.statut).color"
                 >
                   <component :is="getStatutInfo(commande.statut).icon" class="h-3 w-3 mr-1" />
                   {{ getStatutInfo(commande.statut).label }}
                 </span>
-                <span 
-                  class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium"
+                <span
+                  class="priority-badge"
                   :class="getPrioriteInfo(commande.priorite).color"
                 >
                   {{ getPrioriteInfo(commande.priorite).label }}
@@ -487,40 +598,45 @@ const commandesLivrees = computed(() => commandes.value.filter(c => c.statutGlob
 
           </div>
 
-          <!-- Actions -->
-          <div class="mt-4 lg:mt-0 lg:ml-4">
-            <div class="flex flex-col space-y-2">
+          <!-- Actions modernisées -->
+          <div class="commande-actions">
+            <div class="actions-grid">
               <button
                 v-if="commande.statut === 'en_attente'"
                 @click="confirmerCommande(commande)"
-                class="px-3 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors text-sm"
+                class="action-btn action-btn-primary"
               >
+                <CheckCircleIcon class="h-4 w-4 mr-2" />
                 Confirmer
               </button>
               <button
                 v-if="commande.statut === 'confirmee'"
                 @click="preparerCommande(commande)"
-                class="px-3 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors text-sm"
+                class="action-btn action-btn-orange"
               >
+                <ShoppingCartIcon class="h-4 w-4 mr-2" />
                 Préparer
               </button>
               <button
                 v-if="commande.statut === 'en_preparation'"
                 @click="creerLivraison(commande)"
-                class="px-3 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors text-sm"
+                class="action-btn action-btn-success"
               >
+                <TruckIcon class="h-4 w-4 mr-2" />
                 Créer livraison
               </button>
               <button
                 @click="openModal(commande)"
-                class="px-3 py-2 text-orange-600 hover:text-orange-900 transition-colors text-sm"
+                class="action-btn action-btn-secondary"
               >
+                <PencilIcon class="h-4 w-4 mr-2" />
                 Modifier
               </button>
               <button
                 @click="deleteCommande(commande.id)"
-                class="px-3 py-2 text-red-600 hover:text-red-900 transition-colors text-sm"
+                class="action-btn action-btn-danger"
               >
+                <TrashIcon class="h-4 w-4 mr-2" />
                 Supprimer
               </button>
             </div>
@@ -529,26 +645,26 @@ const commandesLivrees = computed(() => commandes.value.filter(c => c.statutGlob
       </div>
     </div>
 
-    <!-- Modal pour ajouter/éditer -->
-    <div v-if="showModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-      <div class="bg-white rounded-2xl shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
-        <!-- Header -->
-        <div class="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 rounded-t-2xl">
-          <div class="flex items-center justify-between">
+    <!-- Modal modernisé -->
+    <div v-if="showModal" class="modal-overlay">
+      <div class="modal-container">
+        <!-- Header moderne -->
+        <div class="modal-header">
+          <div class="modal-header-content">
             <div class="flex items-center space-x-3">
-              <div class="h-10 w-10 rounded-xl bg-orange-500 flex items-center justify-center">
-                <ShoppingCartIcon class="h-5 w-5 text-white" />
+              <div class="modal-icon">
+                <ShoppingCartIcon class="h-6 w-6 text-white" />
               </div>
               <div>
-                <h3 class="text-xl font-bold text-gray-900">
+                <h3 class="modal-title">
                   {{ editingCommande ? 'Modifier la commande' : 'Nouvelle commande' }}
                 </h3>
-                <p class="text-sm text-gray-500">Gestion des commandes clients</p>
+                <p class="modal-subtitle">Gestion des commandes clients</p>
               </div>
             </div>
             <button
               @click="showModal = false"
-              class="text-gray-400 hover:text-gray-600"
+              class="modal-close"
             >
               <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
@@ -691,7 +807,9 @@ const commandesLivrees = computed(() => commandes.value.filter(c => c.statutGlob
                       class="w-full rounded-lg border-gray-300 focus:border-orange-500 focus:ring-orange-500 bg-white"
                     >
                       <option value="">Sélectionner un produit</option>
-                      <option v-for="p in produits" :key="p" :value="p">{{ p }}</option>
+                      <option v-for="p in produitsDisponibles" :key="p.nom" :value="p.nom">
+                        {{ p.nom }} (Stock: {{ p.stock }} {{ p.unite }})
+                      </option>
                     </select>
                   </div>
                   <div>
@@ -749,20 +867,20 @@ const commandesLivrees = computed(() => commandes.value.filter(c => c.statutGlob
           </form>
         </div>
 
-        <!-- Footer -->
-        <div class="sticky bottom-0 bg-white border-t border-gray-200 px-6 py-4 rounded-b-2xl">
-          <div class="flex flex-col sm:flex-row gap-3 justify-end">
+        <!-- Footer moderne -->
+        <div class="modal-footer">
+          <div class="modal-footer-content">
             <button
               type="button"
               @click="showModal = false"
-              class="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
+              class="btn-cancel"
             >
               Annuler
             </button>
             <button
               type="submit"
               form="commande-form"
-              class="px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors"
+              class="btn-submit"
             >
               {{ editingCommande ? 'Modifier la commande' : 'Créer la commande' }}
             </button>
@@ -770,5 +888,1034 @@ const commandesLivrees = computed(() => commandes.value.filter(c => c.statutGlob
         </div>
       </div>
     </div>
+    </div>
   </div>
 </template>
+
+<style scoped>
+/* Layout principal harmonisé */
+.commandes-container {
+  min-height: 100vh;
+  background-color: #f9fafb;
+}
+
+.commandes-header {
+  background: linear-gradient(135deg, #fff7ed 0%, #fed7aa 100%);
+  border: 1px solid #fb923c;
+  border-radius: 1.5rem;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  margin-bottom: 2rem;
+}
+
+.header-content {
+  max-width: 80rem;
+  margin: 0 auto;
+  padding: 2rem 1rem;
+}
+
+@media (min-width: 640px) {
+  .header-content {
+    padding: 2rem 1.5rem;
+  }
+}
+
+@media (min-width: 1024px) {
+  .header-content {
+    padding: 2rem 2rem;
+  }
+}
+
+.header-main {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 1.5rem;
+}
+
+.page-title {
+  font-size: 2.25rem;
+  font-weight: 800;
+  color: #111827;
+  margin-bottom: 0.5rem;
+}
+
+.page-subtitle {
+  font-size: 1rem;
+  color: #6b7280;
+  font-weight: 500;
+}
+
+.action-button {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.75rem 1.5rem;
+  background: linear-gradient(135deg, #f97316 0%, #ea580c 100%);
+  color: #ffffff;
+  font-weight: 600;
+  border-radius: 1rem;
+  border: 1px solid #ea580c;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  transition: all 0.3s ease;
+}
+
+.action-button:hover {
+  background: linear-gradient(135deg, #ea580c 0%, #dc2626 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+}
+
+.main-content {
+  max-width: 80rem;
+  margin: 0 auto;
+  padding: 0 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+@media (min-width: 640px) {
+  .main-content {
+    padding: 0 1.5rem;
+  }
+}
+
+@media (min-width: 1024px) {
+  .main-content {
+    padding: 0 2rem;
+  }
+}
+
+/* KPI Cards principaux */
+.stats-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1.5rem;
+}
+
+@media (min-width: 768px) {
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (min-width: 1024px) {
+  .stats-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+.stat-card {
+  background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+  overflow: hidden;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  border-radius: 1.5rem;
+  border: 1px solid #e2e8f0;
+  transition: all 0.3s ease;
+  position: relative;
+}
+
+.stat-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+}
+
+.stat-content {
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  position: relative;
+}
+
+.stat-icon-wrapper {
+  height: 2.5rem;
+  width: 2.5rem;
+  border-radius: 0.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}
+
+.stat-blue {
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+}
+
+.stat-yellow {
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+}
+
+.stat-orange {
+  background: linear-gradient(135deg, #f97316 0%, #ea580c 100%);
+}
+
+.stat-green {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+}
+
+.stat-icon {
+  height: 1.25rem;
+  width: 1.25rem;
+  color: #ffffff;
+}
+
+.stat-details {
+  flex: 1;
+}
+
+.stat-label {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #6b7280;
+  margin-bottom: 0.5rem;
+}
+
+.stat-value {
+  font-size: 1.875rem;
+  font-weight: 700;
+  color: #111827;
+  line-height: 1;
+}
+
+.stat-unit {
+  font-size: 0.75rem;
+  color: #9ca3af;
+  font-weight: 500;
+  margin-top: 0.25rem;
+}
+
+.stat-badge {
+  margin-top: 0.75rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* KPI Secondaires */
+.secondary-stats-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1rem;
+}
+
+@media (min-width: 768px) {
+  .secondary-stats-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+.secondary-stat-card {
+  background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+  border-radius: 1rem;
+  padding: 1.25rem;
+  border: 1px solid #e2e8f0;
+  transition: all 0.2s ease;
+}
+
+.secondary-stat-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+}
+
+.secondary-stat-content {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.secondary-stat-icon {
+  height: 2rem;
+  width: 2rem;
+  border-radius: 0.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 4px -1px rgba(0, 0, 0, 0.06), 0 1px 2px -1px rgba(0, 0, 0, 0.1);
+}
+
+.stat-red {
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+}
+
+.secondary-stat-label {
+  font-size: 0.875rem;
+  color: #6b7280;
+  font-weight: 500;
+}
+
+.secondary-stat-value {
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: #111827;
+  margin-top: 0.25rem;
+}
+
+/* Filtres */
+.filters-card {
+  background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+  border: 1px solid #e2e8f0;
+  border-radius: 1.5rem;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  overflow: hidden;
+}
+
+.filters-header {
+  padding: 1.5rem;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.chart-title {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: #111827;
+}
+
+.chart-subtitle {
+  font-size: 0.875rem;
+  color: #6b7280;
+  margin-top: 0.25rem;
+}
+
+.filters-content {
+  padding: 1.5rem;
+}
+
+.filters-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  align-items: center;
+}
+
+.filter-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.filter-icon {
+  height: 1.25rem;
+  width: 1.25rem;
+  color: #6b7280;
+}
+
+.filter-input,
+.filter-select {
+  border-radius: 0.5rem;
+  border: 1px solid #d1d5db;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  background-color: #ffffff;
+  transition: all 0.2s ease;
+}
+
+.filter-input:focus,
+.filter-select:focus {
+  border-color: #f97316;
+  ring: 2px;
+  ring-color: rgba(249, 115, 22, 0.2);
+  outline: none;
+}
+
+/* Liste des commandes */
+.commandes-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.commande-card {
+  background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+  border-radius: 1.5rem;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  border: 1px solid #e2e8f0;
+  overflow: hidden;
+  transition: all 0.3s ease;
+}
+
+.commande-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+}
+
+.commande-content {
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+@media (min-width: 1024px) {
+  .commande-content {
+    flex-direction: row;
+    align-items: flex-start;
+  }
+}
+
+.commande-main {
+  flex: 1;
+}
+
+.commande-header {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+@media (min-width: 768px) {
+  .commande-header {
+    flex-direction: row;
+    align-items: flex-start;
+    justify-content: space-between;
+  }
+}
+
+.commande-icon {
+  height: 2.5rem;
+  width: 2.5rem;
+  border-radius: 0.75rem;
+  background: linear-gradient(135deg, #f97316 0%, #ea580c 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}
+
+.commande-title {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #111827;
+}
+
+.commande-client {
+  font-size: 0.875rem;
+  color: #6b7280;
+  font-weight: 500;
+}
+
+.commande-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.status-badge,
+.priority-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.25rem 0.75rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  border: 1px solid transparent;
+}
+
+/* Actions */
+.commande-actions {
+  margin-top: 1rem;
+}
+
+@media (min-width: 1024px) {
+  .commande-actions {
+    margin-top: 0;
+    margin-left: 1.5rem;
+  }
+}
+
+.actions-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.5rem 1rem;
+  border-radius: 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  transition: all 0.2s ease;
+  border: 1px solid transparent;
+  min-width: 140px;
+}
+
+.action-btn-primary {
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+  color: #ffffff;
+  border-color: #2563eb;
+}
+
+.action-btn-primary:hover {
+  background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+  transform: translateY(-1px);
+}
+
+.action-btn-orange {
+  background: linear-gradient(135deg, #f97316 0%, #ea580c 100%);
+  color: #ffffff;
+  border-color: #ea580c;
+}
+
+.action-btn-orange:hover {
+  background: linear-gradient(135deg, #ea580c 0%, #dc2626 100%);
+  transform: translateY(-1px);
+}
+
+.action-btn-success {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: #ffffff;
+  border-color: #059669;
+}
+
+.action-btn-success:hover {
+  background: linear-gradient(135deg, #059669 0%, #047857 100%);
+  transform: translateY(-1px);
+}
+
+.action-btn-secondary {
+  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+  color: #f97316;
+  border-color: #e2e8f0;
+}
+
+.action-btn-secondary:hover {
+  background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%);
+  color: #ea580c;
+  transform: translateY(-1px);
+}
+
+.action-btn-danger {
+  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+  color: #ef4444;
+  border-color: #e2e8f0;
+}
+
+.action-btn-danger:hover {
+  background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%);
+  color: #dc2626;
+  border-color: #fca5a5;
+  transform: translateY(-1px);
+}
+
+/* Modal */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  z-index: 50;
+}
+
+.modal-container {
+  background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+  border-radius: 1.5rem;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+  max-width: 64rem;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+  border: 1px solid #e2e8f0;
+}
+
+.modal-header {
+  position: sticky;
+  top: 0;
+  background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+  border-bottom: 1px solid #e2e8f0;
+  border-top-left-radius: 1.5rem;
+  border-top-right-radius: 1.5rem;
+  z-index: 10;
+}
+
+.modal-header-content {
+  padding: 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.modal-icon {
+  height: 2.5rem;
+  width: 2.5rem;
+  border-radius: 0.75rem;
+  background: linear-gradient(135deg, #f97316 0%, #ea580c 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}
+
+.modal-title {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #111827;
+}
+
+.modal-subtitle {
+  font-size: 0.875rem;
+  color: #6b7280;
+  margin-top: 0.25rem;
+}
+
+.modal-close {
+  color: #9ca3af;
+  padding: 0.5rem;
+  border-radius: 0.5rem;
+  transition: all 0.2s ease;
+}
+
+.modal-close:hover {
+  color: #6b7280;
+  background-color: #f3f4f6;
+}
+
+.modal-footer {
+  position: sticky;
+  bottom: 0;
+  background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+  border-top: 1px solid #e2e8f0;
+  border-bottom-left-radius: 1.5rem;
+  border-bottom-right-radius: 1.5rem;
+  z-index: 10;
+}
+
+.modal-footer-content {
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  justify-content: flex-end;
+}
+
+@media (min-width: 640px) {
+  .modal-footer-content {
+    flex-direction: row;
+  }
+}
+
+.btn-cancel {
+  padding: 0.75rem 1.5rem;
+  border: 1px solid #d1d5db;
+  border-radius: 0.5rem;
+  color: #374151;
+  background: linear-gradient(135deg, #ffffff 0%, #f9fafb 100%);
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.btn-cancel:hover {
+  background: linear-gradient(135deg, #f9fafb 0%, #f3f4f6 100%);
+  border-color: #9ca3af;
+}
+
+.btn-submit {
+  padding: 0.75rem 1.5rem;
+  background: linear-gradient(135deg, #f97316 0%, #ea580c 100%);
+  color: #ffffff;
+  border-radius: 0.5rem;
+  font-weight: 600;
+  transition: all 0.2s ease;
+  border: 1px solid #ea580c;
+}
+
+.btn-submit:hover {
+  background: linear-gradient(135deg, #ea580c 0%, #dc2626 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .header-main {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1rem;
+  }
+
+  .page-title {
+    font-size: 1.75rem;
+    line-height: 1.2;
+    word-break: break-word;
+  }
+
+  .page-subtitle {
+    font-size: 0.875rem;
+    line-height: 1.4;
+  }
+
+  .stats-grid {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+
+  .secondary-stats-grid {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+
+  .secondary-stat-label {
+    font-size: 0.75rem;
+    line-height: 1.3;
+  }
+
+  .secondary-stat-value {
+    font-size: 1rem;
+  }
+
+  .filters-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.75rem;
+  }
+
+  .filter-item {
+    width: 100%;
+  }
+
+  .filter-input,
+  .filter-select {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .commande-header {
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .commande-title {
+    font-size: 1.125rem;
+    line-height: 1.3;
+    word-break: break-word;
+  }
+
+  .commande-client {
+    font-size: 0.8125rem;
+    line-height: 1.3;
+    word-break: break-word;
+  }
+
+  .commande-badges {
+    align-self: flex-start;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+  }
+
+  .status-badge,
+  .priority-badge {
+    font-size: 0.6875rem;
+    padding: 0.1875rem 0.5rem;
+  }
+
+  .actions-grid {
+    flex-direction: column;
+    gap: 0.375rem;
+  }
+
+  .action-btn {
+    min-width: auto;
+    width: 100%;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.8125rem;
+  }
+}
+
+@media (max-width: 640px) {
+  .main-content {
+    padding: 0 0.75rem;
+  }
+
+  .header-content {
+    padding: 1.25rem 0.75rem;
+  }
+
+  .chart-title {
+    font-size: 1rem;
+    line-height: 1.3;
+  }
+
+  .chart-subtitle {
+    font-size: 0.8125rem;
+    line-height: 1.3;
+  }
+
+  .stat-label {
+    font-size: 0.8125rem;
+    line-height: 1.3;
+  }
+
+  .stat-value {
+    font-size: 1.625rem;
+    line-height: 1.2;
+  }
+
+  .stat-unit {
+    font-size: 0.6875rem;
+    line-height: 1.2;
+  }
+
+  .secondary-stat-content {
+    flex-direction: row;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  .modal-container {
+    margin: 0.5rem;
+    max-height: calc(100vh - 1rem);
+  }
+
+  .modal-header-content {
+    padding: 1rem;
+  }
+
+  .modal-title {
+    font-size: 1.125rem;
+    line-height: 1.3;
+  }
+
+  .modal-subtitle {
+    font-size: 0.8125rem;
+    line-height: 1.3;
+  }
+
+  .modal-footer-content {
+    padding: 1rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .commandes-container {
+    overflow-x: hidden;
+  }
+
+  .main-content {
+    padding: 0 0.5rem;
+    max-width: 100vw;
+  }
+
+  .header-content {
+    padding: 1rem 0.5rem;
+  }
+
+  .page-title {
+    font-size: 1.5rem;
+    line-height: 1.2;
+  }
+
+  .action-button {
+    width: 100%;
+    justify-content: center;
+    padding: 0.625rem 1rem;
+    font-size: 0.875rem;
+  }
+
+  .stat-content {
+    padding: 1rem;
+  }
+
+  .stat-value {
+    font-size: 1.5rem;
+  }
+
+  .secondary-stat-content {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
+    text-align: left;
+  }
+
+  .secondary-stat-label {
+    font-size: 0.6875rem;
+  }
+
+  .secondary-stat-value {
+    font-size: 0.875rem;
+  }
+
+  .filters-header {
+    padding: 1rem;
+  }
+
+  .filters-content {
+    padding: 1rem;
+  }
+
+  .commande-content {
+    padding: 1rem;
+  }
+
+  .commande-info {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .commande-title {
+    font-size: 1rem;
+    word-break: break-all;
+    hyphens: auto;
+  }
+
+  .commande-client {
+    font-size: 0.75rem;
+    word-break: break-all;
+    hyphens: auto;
+  }
+
+  .status-badge,
+  .priority-badge {
+    font-size: 0.625rem;
+    padding: 0.125rem 0.375rem;
+    white-space: nowrap;
+  }
+
+  .modal-container {
+    margin: 0.25rem;
+    max-height: calc(100vh - 0.5rem);
+    min-width: 0;
+  }
+
+  .modal-header-content {
+    padding: 0.75rem;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  .modal-title {
+    font-size: 1rem;
+    word-break: break-word;
+    hyphens: auto;
+  }
+
+  .modal-subtitle {
+    font-size: 0.75rem;
+    word-break: break-word;
+  }
+
+  .modal-footer-content {
+    padding: 0.75rem;
+    gap: 0.5rem;
+  }
+
+  .btn-cancel,
+  .btn-submit {
+    padding: 0.625rem 1rem;
+    font-size: 0.875rem;
+    width: 100%;
+  }
+
+  /* Correction spécifique des débordements */
+  * {
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+  }
+
+  .commande-card {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .filters-card {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .stat-card {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  /* Tables et contenus longs */
+  .table-responsive {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Éviter les débordements sur les éléments flex */
+  .flex {
+    min-width: 0;
+  }
+
+  .flex > * {
+    min-width: 0;
+    flex-shrink: 1;
+  }
+}
+
+/* Corrections supplémentaires pour tous les écrans */
+.commande-card,
+.stat-card,
+.secondary-stat-card,
+.filters-card {
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.commande-content,
+.stat-content,
+.secondary-stat-content,
+.filters-content {
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+/* Assurer que les textes longs se cassent correctement */
+.commande-title,
+.commande-client,
+.page-title,
+.chart-title,
+.modal-title {
+  word-break: break-word;
+  hyphens: auto;
+  -webkit-hyphens: auto;
+  -ms-hyphens: auto;
+}
+
+/* Animations */
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.stat-card,
+.secondary-stat-card,
+.commande-card,
+.filters-card {
+  animation: slideIn 0.3s ease-out;
+}
+
+.commande-card:nth-child(1) { animation-delay: 0.1s; }
+.commande-card:nth-child(2) { animation-delay: 0.2s; }
+.commande-card:nth-child(3) { animation-delay: 0.3s; }
+.commande-card:nth-child(4) { animation-delay: 0.4s; }
+.commande-card:nth-child(5) { animation-delay: 0.5s; }
+
+@keyframes modalSlideIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95) translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.modal-container {
+  animation: modalSlideIn 0.3s ease-out;
+}
+</style>

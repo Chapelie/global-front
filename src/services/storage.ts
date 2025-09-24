@@ -1,4 +1,6 @@
-// Service pour gérer le localStorage
+// Service pour gérer le localStorage avec synchronisation Supabase
+import { supabaseSyncService } from './supabaseSync'
+
 export interface User {
   id: number
   username: string
@@ -6,6 +8,31 @@ export interface User {
   role: 'super_admin' | 'admin' | 'secretaire' | 'livreur'
   password: string
   isLoggedIn: boolean
+}
+
+// Type pour les transferts
+export interface Transfert {
+  id: number
+  numeroBordereau: string
+  date: string
+  client: string
+  telephone?: string
+  email?: string
+  adresse?: string
+  produits: Array<{
+    designation: string
+    quantite: number
+    unite: string
+    observation?: string
+  }>
+  chauffeur?: {
+    nom: string
+    telephone?: string
+  }
+  statut: 'en_preparation' | 'en_cours' | 'termine'
+  dateCreation: string
+  dateModification: string
+  notes?: string
 }
 
 export interface Production {
@@ -17,10 +44,52 @@ export interface Production {
     quantitePlanifiee: number
     unite: string
   }>
+  consommables: Array<{
+    articleId: number
+    quantiteUtilisee: number
+    unite: string
+  }>
   statut: 'en_cours' | 'termine' | 'en_attente'
   lotId: string
   heureDebut?: string
   heureFin?: string
+  operateur?: string
+  machine?: string
+  qualiteProduite?: 'excellente' | 'bonne' | 'moyenne' | 'defectueuse'
+  notes?: string
+  tempsEffectif?: number // en minutes
+  rendement?: number // en pourcentage
+  coutProduction?: number
+}
+
+// Interface pour les rapports quotidiens de production
+export interface RapportProductionQuotidien {
+  id: number
+  date: string
+  productionsIds: number[]
+  resumeProduction: {
+    totalArticlesProduits: number
+    totalConsommablesUtilises: number
+    tempsProductionTotal: number
+    rendementMoyen: number
+    coutProductionTotal: number
+  }
+  detailsParArticle: Array<{
+    articleId: number
+    quantiteProduite: number
+    quantitePlanifiee: number
+    tauxRealisation: number
+    coutProduction: number
+  }>
+  detailsConsommables: Array<{
+    articleId: number
+    quantiteUtilisee: number
+    coutTotal: number
+  }>
+  incidents?: string
+  observations?: string
+  operateurs: string[]
+  machines: string[]
 }
 
 export interface Commande {
@@ -76,6 +145,10 @@ export interface Livraison {
   totalLivraison: number
   differenceTotale: number
   resteAPayerTotal: number
+  // Nouvelles propriétés pour la gestion de clôture
+  cloturee?: boolean
+  dateClotureManuelle?: string
+  notesCloture?: string
 }
 
 export interface Article {
@@ -154,6 +227,8 @@ class StorageService {
   private readonly DOCUMENTS_KEY = 'briqueapp_documents'
   private readonly EMPLOYES_KEY = 'briqueapp_employes'
   private readonly CURRENT_USER_KEY = 'briqueapp_current_user'
+  private readonly RAPPORTS_QUOTIDIENS_KEY = 'briqueapp_rapports_quotidiens'
+  private readonly TRANSFERTS_KEY = 'briqueapp_transferts'
 
   // Initialisation des données par défaut
   initializeDefaultData() {
@@ -188,176 +263,20 @@ class StorageService {
       this.saveUsers(defaultUsers)
     }
 
-    // Production par défaut
-    if (!this.getProductions().length) {
-      const defaultProductions: Production[] = [
-        {
-          id: 1,
-          date: new Date().toISOString().split('T')[0],
-          articlesProduits: [
-            {
-              articleId: 1,
-              quantiteProduite: 1200,
-              quantitePlanifiee: 1200,
-              unite: 'pièces'
-            }
-          ],
-          statut: 'termine',
-          lotId: 'LOT-2024-001',
-          heureDebut: '08:00',
-          heureFin: '16:00'
-        },
-        {
-          id: 2,
-          date: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-          articlesProduits: [
-            {
-              articleId: 1,
-              quantiteProduite: 1350,
-              quantitePlanifiee: 1350,
-              unite: 'pièces'
-            }
-          ],
-          statut: 'termine',
-          lotId: 'LOT-2024-002',
-          heureDebut: '08:00',
-          heureFin: '15:30'
-        }
-      ]
-      this.saveProductions(defaultProductions)
-    }
+    // Pas d'autres données par défaut - l'application démarre vide
+  }
 
-    // Stock par défaut
-    if (!this.getStock().length) {
-      const defaultStock: Article[] = [
-        {
-          id: 1,
-          nom: 'Briques standard',
-          categorie: 'Briques',
-          stock: 2500,
-          seuilCritique: 1000,
-          unite: 'pièces',
-          prix: 0.85,
-          fournisseur: 'Briqueterie du Nord',
-          derniereMiseAJour: new Date().toISOString().split('T')[0],
-          notes: 'Stock stable',
-          typeProduction: 'brique',
-          capaciteProduction: 5000,
-          uniteProduction: 'briques/jour',
-          coutProduction: 0.45,
-          tempsProduction: 2,
-          qualite: 'standard',
-          actif: true
-        },
-        {
-          id: 2,
-          nom: 'Ciment Portland',
-          categorie: 'Matériaux',
-          stock: 45,
-          seuilCritique: 30,
-          unite: 'tonnes',
-          prix: 120.00,
-          fournisseur: 'Ciments Calcia',
-          derniereMiseAJour: new Date().toISOString().split('T')[0],
-          notes: 'Stock critique - commande en cours',
-          typeProduction: 'ciment',
-          capaciteProduction: 100,
-          uniteProduction: 'tonnes/jour',
-          coutProduction: 80.00,
-          tempsProduction: 480,
-          qualite: 'standard',
-          actif: true
-        }
-      ]
-      this.saveStock(defaultStock)
-    }
-
-    // Commandes par défaut
-    if (!this.getCommandes().length) {
-      const defaultCommandes: Commande[] = [
-        {
-          id: 1,
-          numeroCommande: 'CMD-20240115-001',
-          date: new Date().toISOString().split('T')[0],
-          client: 'Entreprise Martin',
-          telephone: '06 12 34 56 78',
-          email: 'contact@martin.fr',
-          adresse: '123 Rue de la Paix, 75001 Paris',
-          produits: [
-            { nom: 'Briques standard', quantite: 500, unite: 'pièces' },
-            { nom: 'Ciment Portland', quantite: 2, unite: 'tonnes' }
-          ],
-          statut: 'en_preparation',
-          dateLivraisonSouhaitee: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-          priorite: 'haute'
-        },
-        {
-          id: 2,
-          numeroCommande: 'CMD-20240114-002',
-          date: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-          client: 'Construction Dubois',
-          telephone: '06 98 76 54 32',
-          email: 'info@dubois-construction.fr',
-          adresse: '456 Avenue des Champs, 69000 Lyon',
-          produits: [
-            { nom: 'Briques standard', quantite: 1000, unite: 'pièces' }
-          ],
-          statut: 'livree',
-          dateLivraisonSouhaitee: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-          priorite: 'normale'
-        }
-      ]
-      this.saveCommandes(defaultCommandes)
-    }
-
-    // Livraisons par défaut
-    if (!this.getLivraisons().length) {
-      const defaultLivraisons: Livraison[] = [
-        {
-          id: 1,
-          numeroBL: 'BL-20240115-1430',
-          date: new Date().toISOString().split('T')[0],
-          client: 'Entreprise Martin',
-          telephone: '06 12 34 56 78',
-          chauffeur: 'Camion de livraison',
-          produits: [
-            { nom: 'Briques standard', quantite: 500, unite: 'pièces', quantiteCommandee: 500, quantiteLivree: 0, difference: 500, resteAPayer: 425 },
-            { nom: 'Ciment Portland', quantite: 2, unite: 'tonnes', quantiteCommandee: 2, quantiteLivree: 0, difference: 2, resteAPayer: 240 }
-          ],
-          statut: 'en_cours',
-          adresse: '123 Rue de la Paix, 75001 Paris',
-          codeSuivi: 'ABC12345',
-          totalCommande: 665,
-          totalLivraison: 0,
-          differenceTotale: 665,
-          resteAPayerTotal: 665
-        },
-        {
-          id: 2,
-          numeroBL: 'BL-20240114-0915',
-          date: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-          client: 'Construction Dubois',
-          telephone: '06 98 76 54 32',
-          chauffeur: 'Camion de livraison',
-          produits: [
-            { nom: 'Briques standard', quantite: 1000, unite: 'pièces', quantiteCommandee: 1000, quantiteLivree: 1000, difference: 0, resteAPayer: 0 }
-          ],
-          statut: 'livre',
-          adresse: '456 Avenue des Champs, 69000 Lyon',
-          codeSuivi: 'XYZ98765',
-          preuveDepot: 'Produits déposés en bon état',
-          preuveReception: 'Client satisfait, signature obtenue',
-          signatureClient: 'M. Dubois',
-          heureLivraison: '14:30',
-          dateLivraison: new Date(Date.now() - 24 * 60 * 60 * 1000).toLocaleDateString('fr-FR'),
-          totalCommande: 850,
-          totalLivraison: 850,
-          differenceTotale: 0,
-          resteAPayerTotal: 0
-        }
-      ]
-      this.saveLivraisons(defaultLivraisons)
-    }
+  // Méthode pour vider toutes les données (optionnel)
+  clearAllData() {
+    localStorage.removeItem(this.PRODUCTION_KEY)
+    localStorage.removeItem(this.COMMANDES_KEY)
+    localStorage.removeItem(this.LIVRAISONS_KEY)
+    localStorage.removeItem(this.STOCK_KEY)
+    localStorage.removeItem(this.DOCUMENTS_KEY)
+    localStorage.removeItem(this.EMPLOYES_KEY)
+    localStorage.removeItem(this.RAPPORTS_QUOTIDIENS_KEY)
+    localStorage.removeItem(this.TRANSFERTS_KEY)
+    console.log('🗑️ Toutes les données ont été supprimées')
   }
 
   // Méthodes génériques
@@ -1022,6 +941,475 @@ class StorageService {
     
     stock.splice(index, 1)
     this.saveStock(stock)
+  }
+
+  // NOUVELLES MÉTHODES POUR LA GESTION DES RAPPORTS QUOTIDIENS ET CONSOMMABLES
+
+  // Gestion des rapports quotidiens
+  getRapportsQuotidiens(): RapportProductionQuotidien[] {
+    return this.getItem<RapportProductionQuotidien>(this.RAPPORTS_QUOTIDIENS_KEY)
+  }
+
+  saveRapportsQuotidiens(rapports: RapportProductionQuotidien[]): void {
+    this.setItem(this.RAPPORTS_QUOTIDIENS_KEY, rapports)
+  }
+
+  // Créer un rapport quotidien automatiquement
+  genererRapportQuotidien(date: string): RapportProductionQuotidien {
+    const productions = this.getProductions().filter(p => p.date === date && p.statut === 'termine')
+    const stock = this.getStock()
+
+    if (productions.length === 0) {
+      throw new Error('Aucune production terminée pour cette date')
+    }
+
+    let totalArticlesProduits = 0
+    let totalConsommablesUtilises = 0
+    let tempsProductionTotal = 0
+    let coutProductionTotal = 0
+    let rendements: number[] = []
+
+    const detailsParArticle = new Map<number, {articleId: number, quantiteProduite: number, quantitePlanifiee: number, coutProduction: number}>()
+    const detailsConsommables = new Map<number, {articleId: number, quantiteUtilisee: number, coutTotal: number}>()
+
+    const operateurs = new Set<string>()
+    const machines = new Set<string>()
+
+    productions.forEach(production => {
+      // Articles produits
+      production.articlesProduits.forEach(article => {
+        totalArticlesProduits += article.quantiteProduite
+
+        const articleStock = stock.find(a => a.id === article.articleId)
+        const coutArticle = articleStock ? article.quantiteProduite * articleStock.coutProduction : 0
+
+        if (detailsParArticle.has(article.articleId)) {
+          const detail = detailsParArticle.get(article.articleId)!
+          detail.quantiteProduite += article.quantiteProduite
+          detail.quantitePlanifiee += article.quantitePlanifiee
+          detail.coutProduction += coutArticle
+        } else {
+          detailsParArticle.set(article.articleId, {
+            articleId: article.articleId,
+            quantiteProduite: article.quantiteProduite,
+            quantitePlanifiee: article.quantitePlanifiee,
+            coutProduction: coutArticle
+          })
+        }
+      })
+
+      // Consommables utilisés
+      if (production.consommables) {
+        production.consommables.forEach(consommable => {
+          totalConsommablesUtilises += consommable.quantiteUtilisee
+
+          const consommableStock = stock.find(a => a.id === consommable.articleId)
+          const coutConsommable = consommableStock ? consommable.quantiteUtilisee * consommableStock.prix : 0
+
+          if (detailsConsommables.has(consommable.articleId)) {
+            const detail = detailsConsommables.get(consommable.articleId)!
+            detail.quantiteUtilisee += consommable.quantiteUtilisee
+            detail.coutTotal += coutConsommable
+          } else {
+            detailsConsommables.set(consommable.articleId, {
+              articleId: consommable.articleId,
+              quantiteUtilisee: consommable.quantiteUtilisee,
+              coutTotal: coutConsommable
+            })
+          }
+        })
+      }
+
+      // Temps et rendement
+      if (production.tempsEffectif) {
+        tempsProductionTotal += production.tempsEffectif
+      }
+      if (production.rendement) {
+        rendements.push(production.rendement)
+      }
+      if (production.coutProduction) {
+        coutProductionTotal += production.coutProduction
+      }
+
+      // Opérateurs et machines
+      if (production.operateur) {
+        operateurs.add(production.operateur)
+      }
+      if (production.machine) {
+        machines.add(production.machine)
+      }
+    })
+
+    const rendementMoyen = rendements.length > 0 ? rendements.reduce((a, b) => a + b, 0) / rendements.length : 0
+
+    const rapport: RapportProductionQuotidien = {
+      id: Date.now(),
+      date,
+      productionsIds: productions.map(p => p.id),
+      resumeProduction: {
+        totalArticlesProduits,
+        totalConsommablesUtilises,
+        tempsProductionTotal,
+        rendementMoyen,
+        coutProductionTotal
+      },
+      detailsParArticle: Array.from(detailsParArticle.values()).map(detail => ({
+        ...detail,
+        tauxRealisation: detail.quantitePlanifiee > 0 ? (detail.quantiteProduite / detail.quantitePlanifiee) * 100 : 0
+      })),
+      detailsConsommables: Array.from(detailsConsommables.values()),
+      operateurs: Array.from(operateurs),
+      machines: Array.from(machines)
+    }
+
+    // Sauvegarder le rapport
+    const rapports = this.getRapportsQuotidiens()
+    rapports.push(rapport)
+    this.saveRapportsQuotidiens(rapports)
+
+    return rapport
+  }
+
+  // Obtenir le rapport quotidien pour une date
+  getRapportQuotidien(date: string): RapportProductionQuotidien | null {
+    const rapports = this.getRapportsQuotidiens()
+    return rapports.find(r => r.date === date) || null
+  }
+
+  // Mettre à jour le stock avec les consommables utilisés
+  consommerMatieresPremieresProduction(production: Production): void {
+    if (!production.consommables) return
+
+    const stock = this.getStock()
+    let stockModifie = false
+
+    production.consommables.forEach(consommable => {
+      const articleIndex = stock.findIndex(a => a.id === consommable.articleId)
+      if (articleIndex !== -1) {
+        stock[articleIndex].stock = Math.max(0, stock[articleIndex].stock - consommable.quantiteUtilisee)
+        stock[articleIndex].derniereMiseAJour = new Date().toISOString().split('T')[0]
+        stockModifie = true
+      }
+    })
+
+    if (stockModifie) {
+      this.saveStock(stock)
+    }
+  }
+
+  // Ajouter les articles produits au stock
+  ajouterProductionAuStock(production: Production): void {
+    const stock = this.getStock()
+    let stockModifie = false
+
+    production.articlesProduits.forEach(article => {
+      const articleIndex = stock.findIndex(a => a.id === article.articleId)
+      if (articleIndex !== -1) {
+        stock[articleIndex].stock += article.quantiteProduite
+        stock[articleIndex].derniereMiseAJour = new Date().toISOString().split('T')[0]
+        stockModifie = true
+      }
+    })
+
+    if (stockModifie) {
+      this.saveStock(stock)
+    }
+  }
+
+  // Traitement complet d'une production terminée
+  terminerProduction(productionId: number): void {
+    const productions = this.getProductions()
+    const production = productions.find(p => p.id === productionId)
+
+    if (!production) {
+      throw new Error('Production non trouvée')
+    }
+
+    if (production.statut !== 'en_cours') {
+      throw new Error('Seules les productions en cours peuvent être terminées')
+    }
+
+    // Marquer comme terminée
+    production.statut = 'termine'
+    production.heureFin = new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
+
+    // Calculer le temps effectif si pas déjà renseigné
+    if (!production.tempsEffectif && production.heureDebut && production.heureFin) {
+      const debut = new Date(`1970-01-01T${production.heureDebut}:00`)
+      const fin = new Date(`1970-01-01T${production.heureFin}:00`)
+      production.tempsEffectif = Math.round((fin.getTime() - debut.getTime()) / (1000 * 60))
+    }
+
+    this.saveProductions(productions)
+
+    // Consommer les matières premières
+    this.consommerMatieresPremieresProduction(production)
+
+    // Ajouter la production au stock
+    this.ajouterProductionAuStock(production)
+  }
+
+  // Obtenir les articles consommables (pour la production)
+  getArticlesConsommables(): Article[] {
+    return this.getStock().filter(article =>
+      article.categorie === 'Consommables' ||
+      article.categorie === 'Matériaux' ||
+      article.typeProduction === 'autre'
+    )
+  }
+
+  // Vérifier la disponibilité des consommables pour une production
+  verifierDisponibiliteConsommables(consommables: Array<{articleId: number, quantiteUtilisee: number}>): {disponible: boolean, manquants: Array<{articleId: number, nom: string, quantiteManquante: number}>} {
+    const stock = this.getStock()
+    const manquants: Array<{articleId: number, nom: string, quantiteManquante: number}> = []
+
+    consommables.forEach(consommable => {
+      const article = stock.find(a => a.id === consommable.articleId)
+      if (!article) {
+        manquants.push({
+          articleId: consommable.articleId,
+          nom: 'Article inconnu',
+          quantiteManquante: consommable.quantiteUtilisee
+        })
+      } else if (article.stock < consommable.quantiteUtilisee) {
+        manquants.push({
+          articleId: consommable.articleId,
+          nom: article.nom,
+          quantiteManquante: consommable.quantiteUtilisee - article.stock
+        })
+      }
+    })
+
+    return {
+      disponible: manquants.length === 0,
+      manquants
+    }
+  }
+
+  // ===== GESTION DES TRANSFERTS =====
+
+  // Obtenir tous les transferts
+  getTransferts(): Transfert[] {
+    return this.getItem<Transfert>(this.TRANSFERTS_KEY)
+  }
+
+  // Sauvegarder les transferts
+  saveTransferts(transferts: Transfert[]): void {
+    this.setItem(this.TRANSFERTS_KEY, transferts)
+  }
+
+  // Ajouter un nouveau transfert
+  ajouterTransfert(transfert: Omit<Transfert, 'id' | 'numeroBordereau' | 'dateCreation' | 'dateModification'>): Transfert {
+    const transferts = this.getTransferts()
+    const id = transferts.length > 0 ? Math.max(...transferts.map(t => t.id)) + 1 : 1
+    
+    const nouveauTransfert: Transfert = {
+      ...transfert,
+      id,
+      numeroBordereau: `TRF-${new Date().getFullYear()}-${String(id).padStart(4, '0')}`,
+      dateCreation: new Date().toISOString(),
+      dateModification: new Date().toISOString()
+    }
+
+    transferts.push(nouveauTransfert)
+    this.saveTransferts(transferts)
+    return nouveauTransfert
+  }
+
+  // Modifier un transfert
+  modifierTransfert(id: number, modifications: Partial<Transfert>): void {
+    const transferts = this.getTransferts()
+    const index = transferts.findIndex(t => t.id === id)
+    
+    if (index === -1) {
+      throw new Error('Transfert non trouvé')
+    }
+
+    transferts[index] = {
+      ...transferts[index],
+      ...modifications,
+      dateModification: new Date().toISOString()
+    }
+
+    this.saveTransferts(transferts)
+  }
+
+  // Supprimer un transfert
+  supprimerTransfert(id: number): void {
+    const transferts = this.getTransferts()
+    const index = transferts.findIndex(t => t.id === id)
+    
+    if (index === -1) {
+      throw new Error('Transfert non trouvé')
+    }
+
+    transferts.splice(index, 1)
+    this.saveTransferts(transferts)
+  }
+
+  // Obtenir un transfert par ID
+  getTransfertById(id: number): Transfert | undefined {
+    return this.getTransferts().find(t => t.id === id)
+  }
+
+  // Obtenir les transferts par statut
+  getTransfertsByStatut(statut: Transfert['statut']): Transfert[] {
+    return this.getTransferts().filter(t => t.statut === statut)
+  }
+
+  // Obtenir les statistiques des transferts
+  getTransfertStats(): { totalTransferts: number, transfertsEnCours: number, transfertsTermines: number, totalArticles: number } {
+    const transferts = this.getTransferts()
+    
+    return {
+      totalTransferts: transferts.length,
+      transfertsEnCours: transferts.filter(t => t.statut === 'en_cours').length,
+      transfertsTermines: transferts.filter(t => t.statut === 'termine').length,
+      totalArticles: transferts.reduce((total, t) => 
+        total + t.produits.reduce((sum, p) => sum + p.quantite, 0), 0
+      )
+    }
+  }
+
+  // ===== SYNCHRONISATION SUPABASE =====
+
+  // Synchroniser les articles vers Supabase
+  async syncArticlesToSupabase() {
+    const articles = this.getStock()
+    articles.forEach(article => {
+      supabaseSyncService.addToQueue('insert', 'articles', {
+        nom: article.nom,
+        categorie: article.categorie,
+        stock: article.stock,
+        seuil_critique: article.seuilCritique,
+        unite: article.unite,
+        prix: article.prix,
+        fournisseur: article.fournisseur,
+        derniere_mise_a_jour: article.derniereMiseAJour,
+        notes: article.notes,
+        type_production: article.typeProduction,
+        capacite_production: article.capaciteProduction,
+        unite_production: article.uniteProduction,
+        cout_production: article.coutProduction,
+        temps_production: article.tempsProduction,
+        qualite: article.qualite,
+        actif: article.actif
+      })
+    })
+  }
+
+  // Synchroniser les productions vers Supabase
+  async syncProductionsToSupabase() {
+    const productions = this.getProductions()
+    productions.forEach(production => {
+      supabaseSyncService.addToQueue('insert', 'productions', {
+        date: production.date,
+        statut: production.statut,
+        lot_id: production.lotId,
+        heure_debut: production.heureDebut,
+        heure_fin: production.heureFin,
+        temps_effectif: production.tempsEffectif
+      })
+    })
+  }
+
+  // Synchroniser les commandes vers Supabase
+  async syncCommandesToSupabase() {
+    const commandes = this.getCommandes()
+    commandes.forEach(commande => {
+      supabaseSyncService.addToQueue('insert', 'commandes', {
+        numero_commande: commande.numeroCommande,
+        date: commande.date,
+        client: commande.client,
+        telephone: commande.telephone,
+        email: commande.email,
+        adresse: commande.adresse,
+        statut: commande.statut,
+        date_livraison_souhaitee: commande.dateLivraisonSouhaitee,
+        priorite: commande.priorite
+      })
+    })
+  }
+
+  // Synchroniser les livraisons vers Supabase
+  async syncLivraisonsToSupabase() {
+    const livraisons = this.getLivraisons()
+    livraisons.forEach(livraison => {
+      supabaseSyncService.addToQueue('insert', 'livraisons', {
+        numero_bl: livraison.numeroBL,
+        date: livraison.date,
+        client: livraison.client,
+        telephone: livraison.telephone,
+        chauffeur: livraison.chauffeur,
+        statut: livraison.statut,
+        adresse: livraison.adresse,
+        code_suivi: livraison.codeSuivi,
+        preuve_depot: livraison.preuveDepot,
+        preuve_reception: livraison.preuveReception,
+        signature_client: livraison.signatureClient,
+        observations: livraison.observations,
+        heure_livraison: livraison.heureLivraison,
+        date_livraison: livraison.dateLivraison,
+        total_commande: livraison.totalCommande,
+        total_livraison: livraison.totalLivraison,
+        difference_totale: livraison.differenceTotale,
+        reste_a_payer_total: livraison.resteAPayerTotal,
+        cloturee: livraison.cloturee,
+        date_cloture_manuelle: livraison.dateClotureManuelle,
+        notes_cloture: livraison.notesCloture
+      })
+    })
+  }
+
+  // Synchroniser les transferts vers Supabase
+  async syncTransfertsToSupabase() {
+    const transferts = this.getTransferts()
+    transferts.forEach(transfert => {
+      supabaseSyncService.addToQueue('insert', 'transferts', {
+        numero_bordereau: transfert.numeroBordereau,
+        date: transfert.date,
+        client: transfert.client,
+        telephone: transfert.telephone,
+        email: transfert.email,
+        adresse: transfert.adresse,
+        chauffeur_nom: transfert.chauffeur?.nom,
+        chauffeur_telephone: transfert.chauffeur?.telephone,
+        statut: transfert.statut,
+        notes: transfert.notes
+      })
+    })
+  }
+
+  // Synchronisation complète vers Supabase
+  async syncAllToSupabase() {
+    try {
+      console.log('🔄 Début de la synchronisation vers Supabase...')
+      
+      await this.syncArticlesToSupabase()
+      await this.syncProductionsToSupabase()
+      await this.syncCommandesToSupabase()
+      await this.syncLivraisonsToSupabase()
+      await this.syncTransfertsToSupabase()
+      
+      console.log('✅ Synchronisation vers Supabase terminée')
+    } catch (error) {
+      console.error('❌ Erreur lors de la synchronisation:', error)
+    }
+  }
+
+  // Obtenir le statut de synchronisation
+  getSyncStatus() {
+    return supabaseSyncService.getStatus()
+  }
+
+  // Démarrer la synchronisation automatique
+  startAutoSync(intervalMs: number = 30000) {
+    supabaseSyncService.startAutoSync(intervalMs)
+  }
+
+  // Arrêter la synchronisation automatique
+  stopAutoSync() {
+    supabaseSyncService.stopAutoSync()
   }
 }
 

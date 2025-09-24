@@ -2,9 +2,11 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { storageService } from '../services/storage'
+import { useLogo } from '../composables/useLogo'
 import { CubeIcon } from '@heroicons/vue/24/outline'
 
 const router = useRouter()
+const { logo, getLogoAlt, getLogoClass } = useLogo()
 
 const username = ref('')
 const password = ref('')
@@ -44,7 +46,7 @@ storageService.initializeDefaultData()
   <div class="min-h-screen bg-gray-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
     <div class="sm:mx-auto sm:w-full sm:max-w-md">
       <div class="flex justify-center">
-        <img src="/logo.jpg" alt="Global Star Distribution" class="h-16 w-16 rounded-xl object-cover">
+        <img :src="logo" :alt="getLogoAlt()" :class="getLogoClass('medium')">
       </div>
       <h2 class="mt-6 text-center text-3xl font-bold tracking-tight text-gray-900">
         Global Star Distribution

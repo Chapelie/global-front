@@ -1,12 +1,19 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { storageService } from '../services/storage'
-import { 
+import {
   ChartBarIcon,
   ArrowUpIcon,
   ArrowDownIcon,
-  PlusIcon,
-  MinusIcon
+  CubeIcon,
+  TruckIcon,
+  CurrencyDollarIcon,
+  ClockIcon,
+  ExclamationTriangleIcon,
+  CheckCircleIcon,
+  BanknotesIcon,
+  ChartPieIcon,
+  CalendarDaysIcon
 } from '@heroicons/vue/24/outline'
 import BarChart from '../components/charts/BarChart.vue'
 import LineChart from '../components/charts/LineChart.vue'
@@ -74,233 +81,397 @@ const performanceData = ref([
   { jour: 'Dim', production: 600, objectif: 600 }
 ])
 
-// KPIs calculés dynamiquement depuis les articles et la production
+// KPIs calculés avec des données exactes et précises
 const kpis = computed(() => {
   const articles = storageService.getStock()
-  const articlesActifs = articles.filter(a => a.actif)
-  
-  // Calculer la production mensuelle totale
-  const productionMensuelle = articlesActifs.reduce((total, article) => {
-    const stats = storageService.getStatistiquesProductionArticle(article.id, 'mois')
-    return total + stats.totalProduit
+  const productions = storageService.getProductions()
+  const livraisons = storageService.getLivraisons()
+  const commandes = storageService.getCommandes()
+
+  const today = new Date()
+  const currentMonth = today.getMonth()
+  const currentYear = today.getFullYear()
+  const lastMonth = new Date(currentYear, currentMonth - 1, 1)
+
+  // 1. Production mensuelle exacte
+  const productionsCurrentMonth = productions.filter(p => {
+    const prodDate = new Date(p.date)
+    return prodDate.getMonth() === currentMonth && prodDate.getFullYear() === currentYear
+  })
+
+  const productionMensuelle = productionsCurrentMonth.reduce((total, prod) => {
+    return total + prod.articlesProduits.reduce((sum, art) => sum + art.quantiteProduite, 0)
   }, 0)
-  
-  // Calculer la valeur totale du stock
+
+  const productionsLastMonth = productions.filter(p => {
+    const prodDate = new Date(p.date)
+    return prodDate.getMonth() === lastMonth.getMonth() && prodDate.getFullYear() === lastMonth.getFullYear()
+  })
+
+  const productionMoisPrecedent = productionsLastMonth.reduce((total, prod) => {
+    return total + prod.articlesProduits.reduce((sum, art) => sum + art.quantiteProduite, 0)
+  }, 0)
+
+  const evolutionProduction = productionMoisPrecedent > 0 ?
+    ((productionMensuelle - productionMoisPrecedent) / productionMoisPrecedent) * 100 : 0
+
+  // 2. Livraisons mensuelles exactes
+  const livraisonsCurrentMonth = livraisons.filter(l => {
+    const livrDate = new Date(l.date)
+    return livrDate.getMonth() === currentMonth && livrDate.getFullYear() === currentYear
+  })
+
+  const livraisonsMensuelles = livraisonsCurrentMonth.length
+  const livraisonsTerminees = livraisonsCurrentMonth.filter(l => l.statut === 'livre').length
+  const tauxReussiteLivraison = livraisonsMensuelles > 0 ? (livraisonsTerminees / livraisonsMensuelles) * 100 : 0
+
+  // 3. Valeur stock exacte
   const valeurStock = articles.reduce((total, article) => {
     return total + (article.stock * article.prix)
   }, 0)
-  
-  // Calculer le taux de rendement moyen
-  const tauxRendement = articlesActifs.length > 0 ? 
-    articlesActifs.reduce((total, article) => {
-      const stats = storageService.getStatistiquesProductionArticle(article.id, 'mois')
-      return total + stats.rendementMoyen
-    }, 0) / articlesActifs.length : 0
-  
-  // Calculer les vraies livraisons mensuelles
-  const commandes = storageService.getCommandes()
-  const moisCourant = new Date().getMonth()
-  const anneeCourante = new Date().getFullYear()
-  const livraisonsMensuelles = commandes.filter(commande => {
-    const dateCommande = new Date(commande.date)
-    return dateCommande.getMonth() === moisCourant && 
-           dateCommande.getFullYear() === anneeCourante
-  }).length
-  
-  // Calculer l'évolution de la production (comparaison avec le mois précédent)
-  const moisPrecedent = new Date()
-  moisPrecedent.setMonth(moisPrecedent.getMonth() - 1)
-  const productionMoisPrecedent = articlesActifs.reduce((total, article) => {
-    const stats = storageService.getStatistiquesProductionArticle(article.id, 'mois')
-    return total + stats.totalProduit
+
+  // 4. Chiffre d'affaires mensuel
+  const chiffreAffairesMensuel = livraisonsCurrentMonth
+    .filter(l => l.statut === 'livre')
+    .reduce((total, livraison) => total + (livraison.totalLivraison || 0), 0)
+
+  // 5. Rendement moyen exact
+  const productionsTerminees = productionsCurrentMonth.filter(p => p.statut === 'termine')
+  const rendementMoyen = productionsTerminees.length > 0 ?
+    productionsTerminees.reduce((sum, p) => sum + (p.rendement || 0), 0) / productionsTerminees.length : 0
+
+  // 6. Coût de production mensuel
+  const coutProductionMensuel = productionsCurrentMonth.reduce((total, prod) => {
+    return total + (prod.coutProduction || 0)
   }, 0)
-  
-  const evolutionProduction = productionMoisPrecedent > 0 ? 
-    ((productionMensuelle - productionMoisPrecedent) / productionMoisPrecedent) * 100 : 0
-  
+
+  // 7. Articles critiques
+  const articlesCritiques = articles.filter(a => a.stock <= a.seuilCritique).length
+
+  // 8. Temps de production moyen
+  const tempsProductionMoyen = productionsTerminees.length > 0 ?
+    productionsTerminees.reduce((sum, p) => sum + (p.tempsEffectif || 0), 0) / productionsTerminees.length : 0
+
   return {
     productionMensuelle,
     evolutionProduction: Math.round(evolutionProduction * 100) / 100,
     livraisonsMensuelles,
-    evolutionLivraisons: 0, // À calculer plus tard si nécessaire
+    tauxReussiteLivraison: Math.round(tauxReussiteLivraison * 100) / 100,
     valeurStock,
-    evolutionStock: 0, // À calculer plus tard si nécessaire
-    tauxRendement: Math.round(tauxRendement * 100) / 100,
-    evolutionRendement: 0 // À calculer plus tard si nécessaire
+    chiffreAffairesMensuel,
+    rendementMoyen: Math.round(rendementMoyen * 100) / 100,
+    coutProductionMensuel,
+    articlesCritiques,
+    tempsProductionMoyen: Math.round(tempsProductionMoyen / 60 * 100) / 100, // en heures
+    margeNette: chiffreAffairesMensuel - coutProductionMensuel,
+    productiviteJournaliere: productionsTerminees.length > 0 ? Math.round(productionMensuelle / productionsTerminees.length) : 0
   }
 })
 </script>
 
 <template>
-  <div class="space-y-6">
-    <!-- En-tête -->
-    <div class="mb-8">
-      <h2 class="text-2xl font-bold text-gray-900">Analyses & Rapports</h2>
-      <p class="mt-2 text-gray-600">Tableaux de bord et analyses détaillées</p>
-    </div>
-
-        <!-- KPI Principaux -->
-    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-      <div class="bg-white rounded-2xl shadow-md p-6 border border-gray-100">
-        <div class="flex items-center justify-between">
-          <div>
-            <p class="text-sm font-medium text-gray-600">Production mensuelle</p>
-            <p class="text-2xl font-bold text-gray-900">{{ kpis.productionMensuelle.toLocaleString() }}</p>
-            <div class="flex items-center space-x-2">
-              <span class="text-sm text-gray-500">articles</span>
-              <span v-if="kpis.evolutionProduction !== 0" 
-                    :class="kpis.evolutionProduction > 0 ? 'text-green-600' : 'text-red-600'"
-                    class="text-xs font-medium">
-                {{ kpis.evolutionProduction > 0 ? '+' : '' }}{{ kpis.evolutionProduction }}%
-              </span>
+  <div class="analyses-container">
+    <!-- Header moderne -->
+    <div class="analyses-header">
+      <div class="header-content">
+        <div class="header-main">
+          <div class="flex items-center">
+            <div class="h-12 w-12 rounded-2xl bg-gradient-to-br from-purple-500 to-indigo-500 flex items-center justify-center mr-4 shadow-lg">
+              <ChartBarIcon class="h-6 w-6 text-white" />
+            </div>
+            <div>
+              <h1 class="page-title">Analyses & Rapports</h1>
+              <p class="page-subtitle">Tableaux de bord et métriques avancées</p>
             </div>
           </div>
-          <div class="h-12 w-12 rounded-xl bg-orange-100 flex items-center justify-center">
-            <PlusIcon class="h-6 w-6 text-orange-600" />
+          <div class="flex items-center space-x-4">
+            <div class="hidden md:flex items-center space-x-4 text-sm text-gray-600">
+              <div class="flex items-center">
+                <CalendarDaysIcon class="h-4 w-4 mr-2" />
+                <span>{{ new Date().toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' }) }}</span>
+              </div>
+            </div>
           </div>
         </div>
-      </div>
-
-      <div class="bg-white rounded-2xl shadow-md p-6 border border-gray-100">
-        <div class="flex items-center justify-between">
-          <div>
-            <p class="text-sm font-medium text-gray-600">Livraisons mensuelles</p>
-            <p class="text-2xl font-bold text-gray-900">{{ kpis.livraisonsMensuelles }}</p>
-            <p class="text-sm text-gray-500">commandes</p>
-          </div>
-          <div class="h-12 w-12 rounded-xl bg-blue-100 flex items-center justify-center">
-            <ArrowUpIcon class="h-6 w-6 text-blue-600" />
-          </div>
-        </div>
-
-      </div>
-
-      <div class="bg-white rounded-2xl shadow-md p-6 border border-gray-100">
-        <div class="flex items-center justify-between">
-          <div>
-            <p class="text-sm font-medium text-gray-600">Valeur stock</p>
-            <p class="text-2xl font-bold text-gray-900">{{ kpis.valeurStock.toLocaleString('fr-FR', { style: 'currency', currency: 'XOF' }) }}</p>
-            <p class="text-sm text-gray-500">total</p>
-          </div>
-          <div class="h-12 w-12 rounded-xl bg-green-100 flex items-center justify-center">
-            <MinusIcon class="h-6 w-6 text-green-600" />
-          </div>
-        </div>
-
-      </div>
-
-      <div class="bg-white rounded-2xl shadow-md p-6 border border-gray-100">
-        <div class="flex items-center justify-between">
-          <div>
-            <p class="text-sm font-medium text-gray-600">Taux de rendement</p>
-            <p class="text-2xl font-bold text-gray-900">{{ kpis.tauxRendement }}%</p>
-            <p class="text-sm text-gray-500">moyen</p>
-          </div>
-          <div class="h-12 w-12 rounded-xl bg-purple-100 flex items-center justify-center">
-            <ArrowUpIcon class="h-6 w-6 text-purple-600" />
-          </div>
-        </div>
-
       </div>
     </div>
 
-    <!-- Graphiques -->
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <div class="main-content">
+
+    <!-- KPI Principaux modernisés -->
+    <div class="stats-grid">
       <!-- Production mensuelle -->
-      <div class="bg-white rounded-2xl shadow-md p-6 border border-gray-100">
-        <h3 class="text-lg font-semibold text-gray-900 mb-6">Évolution production mensuelle</h3>
-        <BarChart 
-          :data="productionData"
-          :labels="productionData.map(item => item.mois)"
-          :datasets="[
-            {
-              label: 'Production totale',
-              data: productionData.map(item => item.production),
-              backgroundColor: '#f97316'
-            },
-            {
-              label: 'Livraisons',
-              data: productionData.map(item => item.livraisons),
-              backgroundColor: '#3b82f6'
-            }
-          ]"
-          :height="256"
-        />
+      <div class="stat-card">
+        <div class="stat-content">
+          <div class="stat-icon-wrapper stat-orange">
+            <CubeIcon class="stat-icon" />
+          </div>
+          <div class="stat-details">
+            <dt class="stat-label">Production mensuelle</dt>
+            <dd class="stat-value">{{ kpis.productionMensuelle.toLocaleString() }}</dd>
+            <dd class="stat-unit">articles</dd>
+          </div>
+          <div v-if="kpis.evolutionProduction !== 0" class="stat-trend">
+            <component
+              :is="kpis.evolutionProduction > 0 ? ArrowUpIcon : ArrowDownIcon"
+              class="h-4 w-4"
+              :class="kpis.evolutionProduction > 0 ? 'text-green-600' : 'text-red-600'"
+            />
+            <span class="text-xs font-medium" :class="kpis.evolutionProduction > 0 ? 'text-green-600' : 'text-red-600'">
+              {{ Math.abs(kpis.evolutionProduction) }}%
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Chiffre d'affaires -->
+      <div class="stat-card">
+        <div class="stat-content">
+          <div class="stat-icon-wrapper stat-green">
+            <CurrencyDollarIcon class="stat-icon" />
+          </div>
+          <div class="stat-details">
+            <dt class="stat-label">Chiffre d'affaires</dt>
+            <dd class="stat-value">{{ kpis.chiffreAffairesMensuel.toLocaleString('fr-FR', { style: 'currency', currency: 'XOF' }) }}</dd>
+            <dd class="stat-unit">ce mois</dd>
+          </div>
+        </div>
+      </div>
+
+      <!-- Livraisons -->
+      <div class="stat-card">
+        <div class="stat-content">
+          <div class="stat-icon-wrapper stat-blue">
+            <TruckIcon class="stat-icon" />
+          </div>
+          <div class="stat-details">
+            <dt class="stat-label">Livraisons</dt>
+            <dd class="stat-value">{{ kpis.livraisonsMensuelles }}</dd>
+            <dd class="stat-unit">{{ kpis.tauxReussiteLivraison }}% réussies</dd>
+          </div>
+          <div class="stat-badge">
+            <CheckCircleIcon class="h-4 w-4 text-green-600" />
+          </div>
+        </div>
+      </div>
+
+      <!-- Rendement moyen -->
+      <div class="stat-card">
+        <div class="stat-content">
+          <div class="stat-icon-wrapper stat-purple">
+            <ChartPieIcon class="stat-icon" />
+          </div>
+          <div class="stat-details">
+            <dt class="stat-label">Rendement moyen</dt>
+            <dd class="stat-value">{{ kpis.rendementMoyen }}%</dd>
+            <dd class="stat-unit">efficacité</dd>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- KPI Secondaires -->
+    <div class="secondary-stats-grid">
+      <!-- Valeur stock -->
+      <div class="secondary-stat-card">
+        <div class="secondary-stat-content">
+          <div class="secondary-stat-icon stat-indigo">
+            <BanknotesIcon class="h-5 w-5 text-white" />
+          </div>
+          <div>
+            <p class="secondary-stat-label">Valeur stock</p>
+            <p class="secondary-stat-value">{{ kpis.valeurStock.toLocaleString('fr-FR', { style: 'currency', currency: 'XOF' }) }}</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Articles critiques -->
+      <div class="secondary-stat-card">
+        <div class="secondary-stat-content">
+          <div class="secondary-stat-icon stat-red">
+            <ExclamationTriangleIcon class="h-5 w-5 text-white" />
+          </div>
+          <div>
+            <p class="secondary-stat-label">Articles critiques</p>
+            <p class="secondary-stat-value">{{ kpis.articlesCritiques }}</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Temps production -->
+      <div class="secondary-stat-card">
+        <div class="secondary-stat-content">
+          <div class="secondary-stat-icon stat-yellow">
+            <ClockIcon class="h-5 w-5 text-white" />
+          </div>
+          <div>
+            <p class="secondary-stat-label">Temps moyen</p>
+            <p class="secondary-stat-value">{{ kpis.tempsProductionMoyen }}h</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Marge nette -->
+      <div class="secondary-stat-card">
+        <div class="secondary-stat-content">
+          <div class="secondary-stat-icon" :class="kpis.margeNette >= 0 ? 'stat-green' : 'stat-red'">
+            <CurrencyDollarIcon class="h-5 w-5 text-white" />
+          </div>
+          <div>
+            <p class="secondary-stat-label">Marge nette</p>
+            <p class="secondary-stat-value" :class="kpis.margeNette >= 0 ? 'text-green-600' : 'text-red-600'">
+              {{ kpis.margeNette.toLocaleString('fr-FR', { style: 'currency', currency: 'XOF' }) }}
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Graphiques modernisés -->
+    <div class="charts-section">
+      <!-- Production mensuelle -->
+      <div class="chart-card">
+        <div class="chart-header">
+          <div class="flex items-center">
+            <div class="h-10 w-10 rounded-xl bg-gradient-to-br from-orange-500 to-amber-500 flex items-center justify-center mr-3 shadow-lg">
+              <ChartBarIcon class="h-5 w-5 text-white" />
+            </div>
+            <div>
+              <h3 class="chart-title">Évolution production mensuelle</h3>
+              <p class="chart-subtitle">Comparaison production vs livraisons</p>
+            </div>
+          </div>
+        </div>
+        <div class="chart-content">
+          <BarChart
+            :data="productionData"
+            :labels="productionData.map(item => item.mois)"
+            :datasets="[
+              {
+                label: 'Production totale',
+                data: productionData.map(item => item.production),
+                backgroundColor: '#f97316'
+              },
+              {
+                label: 'Livraisons',
+                data: productionData.map(item => item.livraisons),
+                backgroundColor: '#3b82f6'
+              }
+            ]"
+            :height="256"
+          />
+        </div>
       </div>
 
       <!-- Performance hebdomadaire -->
-      <div class="bg-white rounded-2xl shadow-md p-6 border border-gray-100">
-        <h3 class="text-lg font-semibold text-gray-900 mb-6">Performance hebdomadaire</h3>
-        <LineChart 
-          :data="performanceData"
-          :labels="performanceData.map(item => item.jour)"
-          :datasets="[
-            {
-              label: 'Production',
-              data: performanceData.map(item => item.production),
-              borderColor: '#f97316',
-              backgroundColor: 'rgba(249, 115, 22, 0.1)',
-              borderWidth: 3,
-              fill: true
-            },
-            {
-              label: 'Objectif',
-              data: performanceData.map(item => item.objectif),
-              borderColor: '#6b7280',
-              backgroundColor: 'rgba(107, 114, 128, 0.1)',
-              borderWidth: 2,
-              fill: false
-            }
-          ]"
-          :height="256"
-        />
+      <div class="chart-card">
+        <div class="chart-header">
+          <div class="flex items-center">
+            <div class="h-10 w-10 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-500 flex items-center justify-center mr-3 shadow-lg">
+              <ChartPieIcon class="h-5 w-5 text-white" />
+            </div>
+            <div>
+              <h3 class="chart-title">Performance hebdomadaire</h3>
+              <p class="chart-subtitle">Production vs objectifs</p>
+            </div>
+          </div>
+        </div>
+        <div class="chart-content">
+          <LineChart
+            :data="performanceData"
+            :labels="performanceData.map(item => item.jour)"
+            :datasets="[
+              {
+                label: 'Production',
+                data: performanceData.map(item => item.production),
+                borderColor: '#f97316',
+                backgroundColor: 'rgba(249, 115, 22, 0.1)',
+                borderWidth: 3,
+                fill: true
+              },
+              {
+                label: 'Objectif',
+                data: performanceData.map(item => item.objectif),
+                borderColor: '#6b7280',
+                backgroundColor: 'rgba(107, 114, 128, 0.1)',
+                borderWidth: 2,
+                fill: false
+              }
+            ]"
+            :height="256"
+          />
+        </div>
       </div>
     </div>
 
-    <!-- Répartition stock -->
-    <div class="bg-white rounded-2xl shadow-md p-6 border border-gray-100">
-      <h3 class="text-lg font-semibold text-gray-900 mb-6">Répartition de la valeur stock</h3>
-      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <PieChart 
-          :data="stockData"
-          :height="256"
-        />
-        
-        <div class="space-y-4">
-          <div v-for="item in stockData" :key="item.label" class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-            <div class="flex items-center">
-              <div class="w-4 h-4 rounded-full mr-3" :style="{ backgroundColor: item.color }"></div>
-              <span class="font-medium text-gray-900">{{ item.label }}</span>
+    <!-- Répartition stock modernisée -->
+    <div class="chart-card">
+      <div class="chart-header">
+        <div class="flex items-center">
+          <div class="h-10 w-10 rounded-xl bg-gradient-to-br from-green-500 to-emerald-500 flex items-center justify-center mr-3 shadow-lg">
+            <ChartPieIcon class="h-5 w-5 text-white" />
+          </div>
+          <div>
+            <h3 class="chart-title">Répartition de la valeur stock</h3>
+            <p class="chart-subtitle">Distribution par articles</p>
+          </div>
+        </div>
+      </div>
+      <div class="chart-content">
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <PieChart
+            :data="stockData"
+            :height="256"
+          />
+
+          <div class="stock-legend">
+            <div v-for="item in stockData" :key="item.label" class="stock-legend-item">
+              <div class="flex items-center">
+                <div class="stock-legend-color" :style="{ backgroundColor: item.color }"></div>
+                <span class="stock-legend-label">{{ item.label }}</span>
+              </div>
+              <span class="stock-legend-value">{{ item.value.toLocaleString('fr-FR', { style: 'currency', currency: 'XOF' }) }}</span>
             </div>
-            <span class="font-semibold text-gray-900">{{ item.value.toLocaleString('fr-FR', { style: 'currency', currency: 'XOF' }) }}</span>
           </div>
         </div>
       </div>
     </div>
 
-    <!-- Tableau récapitulatif -->
-    <div class="bg-white rounded-2xl shadow-md border border-gray-100 overflow-hidden">
-      <div class="px-6 py-4 border-b border-gray-200">
-        <h3 class="text-lg font-semibold text-gray-900">Récapitulatif mensuel</h3>
+    <!-- Tableau récapitulatif modernisé -->
+    <div class="table-card">
+      <div class="table-header">
+        <div class="flex items-center">
+          <div class="h-10 w-10 rounded-xl bg-gradient-to-br from-gray-500 to-slate-500 flex items-center justify-center mr-3 shadow-lg">
+            <CalendarDaysIcon class="h-5 w-5 text-white" />
+          </div>
+          <div>
+            <h3 class="chart-title">Récapitulatif mensuel</h3>
+            <p class="chart-subtitle">Évolution des performances</p>
+          </div>
+        </div>
       </div>
-      <div class="overflow-x-auto">
-        <table class="min-w-full divide-y divide-gray-200">
-          <thead class="bg-gray-50">
+      <div class="table-content">
+        <table class="performance-table">
+          <thead class="table-head">
             <tr>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Mois</th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Production totale</th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Livraisons</th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Rendement</th>
+              <th class="table-header-cell">Mois</th>
+              <th class="table-header-cell">Production totale</th>
+              <th class="table-header-cell">Livraisons</th>
+              <th class="table-header-cell">Taux réussite</th>
             </tr>
           </thead>
-          <tbody class="bg-white divide-y divide-gray-200">
-            <tr v-for="item in productionData" :key="item.mois" class="hover:bg-gray-50">
-              <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{{ item.mois }}</td>
-              <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ item.production.toLocaleString() }}</td>
-              <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ item.livraisons }}</td>
-              <td class="px-6 py-4 whitespace-nowrap">
-                <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">
-                  {{ item.production > 0 ? Math.round((item.production / 1000) * 100) / 100 : 0 }}%
+          <tbody class="table-body">
+            <tr v-for="item in productionData" :key="item.mois" class="table-row">
+              <td class="table-cell table-cell-primary">{{ item.mois }}</td>
+              <td class="table-cell">{{ item.production.toLocaleString() }}</td>
+              <td class="table-cell">{{ item.livraisons }}</td>
+              <td class="table-cell">
+                <span class="performance-badge" :class="{
+                  'performance-badge-excellent': (item.livraisons / Math.max(item.production, 1)) * 100 >= 90,
+                  'performance-badge-good': (item.livraisons / Math.max(item.production, 1)) * 100 >= 70 && (item.livraisons / Math.max(item.production, 1)) * 100 < 90,
+                  'performance-badge-average': (item.livraisons / Math.max(item.production, 1)) * 100 < 70
+                }">
+                  {{ item.production > 0 ? Math.round((item.livraisons / item.production) * 100) : 0 }}%
                 </span>
               </td>
             </tr>
@@ -308,5 +479,533 @@ const kpis = computed(() => {
         </table>
       </div>
     </div>
+    </div>
   </div>
 </template>
+
+<style scoped>
+/* Layout principal harmonisé */
+.analyses-container {
+  min-height: 100vh;
+  background-color: #f9fafb;
+}
+
+.analyses-header {
+  background: linear-gradient(135deg, #f3e8ff 0%, #ede9fe 100%);
+  border: 1px solid #d8b4fe;
+  border-radius: 1.5rem;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  margin-bottom: 2rem;
+}
+
+.header-content {
+  max-width: 80rem;
+  margin: 0 auto;
+  padding: 2rem 1rem;
+}
+
+@media (min-width: 640px) {
+  .header-content {
+    padding: 2rem 1.5rem;
+  }
+}
+
+@media (min-width: 1024px) {
+  .header-content {
+    padding: 2rem 2rem;
+  }
+}
+
+.header-main {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 1.5rem;
+}
+
+.page-title {
+  font-size: 2.25rem;
+  font-weight: 800;
+  color: #111827;
+  margin-bottom: 0.5rem;
+}
+
+.page-subtitle {
+  font-size: 1rem;
+  color: #6b7280;
+  font-weight: 500;
+}
+
+.main-content {
+  max-width: 80rem;
+  margin: 0 auto;
+  padding: 0 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+@media (min-width: 640px) {
+  .main-content {
+    padding: 0 1.5rem;
+  }
+}
+
+@media (min-width: 1024px) {
+  .main-content {
+    padding: 0 2rem;
+  }
+}
+
+/* KPI Cards principaux */
+.stats-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1.5rem;
+}
+
+@media (min-width: 768px) {
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (min-width: 1024px) {
+  .stats-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+.stat-card {
+  background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+  overflow: hidden;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  border-radius: 1.5rem;
+  border: 1px solid #e2e8f0;
+  transition: all 0.3s ease;
+  position: relative;
+}
+
+.stat-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+}
+
+.stat-content {
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  position: relative;
+}
+
+.stat-icon-wrapper {
+  height: 2.5rem;
+  width: 2.5rem;
+  border-radius: 0.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}
+
+.stat-orange {
+  background: linear-gradient(135deg, #f97316 0%, #ea580c 100%);
+}
+
+.stat-blue {
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+}
+
+.stat-green {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+}
+
+.stat-purple {
+  background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+}
+
+.stat-icon {
+  height: 1.25rem;
+  width: 1.25rem;
+  color: #ffffff;
+}
+
+.stat-details {
+  flex: 1;
+}
+
+.stat-label {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #6b7280;
+  margin-bottom: 0.5rem;
+}
+
+.stat-value {
+  font-size: 1.875rem;
+  font-weight: 700;
+  color: #111827;
+  line-height: 1;
+}
+
+.stat-unit {
+  font-size: 0.75rem;
+  color: #9ca3af;
+  font-weight: 500;
+  margin-top: 0.25rem;
+}
+
+.stat-trend {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+}
+
+.stat-badge {
+  margin-top: 0.75rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* KPI Secondaires */
+.secondary-stats-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1rem;
+}
+
+@media (min-width: 640px) {
+  .secondary-stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (min-width: 1024px) {
+  .secondary-stats-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+.secondary-stat-card {
+  background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+  border-radius: 1rem;
+  padding: 1.25rem;
+  border: 1px solid #e2e8f0;
+  transition: all 0.2s ease;
+}
+
+.secondary-stat-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+}
+
+.secondary-stat-content {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.secondary-stat-icon {
+  height: 2rem;
+  width: 2rem;
+  border-radius: 0.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 4px -1px rgba(0, 0, 0, 0.06), 0 1px 2px -1px rgba(0, 0, 0, 0.1);
+}
+
+.stat-indigo {
+  background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+}
+
+.stat-red {
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+}
+
+.stat-yellow {
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+}
+
+.secondary-stat-label {
+  font-size: 0.875rem;
+  color: #6b7280;
+  font-weight: 500;
+}
+
+.secondary-stat-value {
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: #111827;
+  margin-top: 0.25rem;
+}
+
+/* Graphiques */
+.charts-section {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1.5rem;
+}
+
+@media (min-width: 1024px) {
+  .charts-section {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.chart-card,
+.table-card {
+  background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+  border: 1px solid #e2e8f0;
+  border-radius: 1.5rem;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  overflow: hidden;
+  transition: all 0.3s ease;
+}
+
+.chart-card:hover,
+.table-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+}
+
+.chart-header,
+.table-header {
+  padding: 1.5rem;
+  border-bottom: 1px solid #f1f5f9;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.chart-title {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: #111827;
+}
+
+.chart-subtitle {
+  font-size: 0.875rem;
+  color: #6b7280;
+  margin-top: 0.25rem;
+}
+
+.chart-content,
+.table-content {
+  padding: 1.5rem;
+}
+
+/* Légende du stock */
+.stock-legend {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.stock-legend-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem;
+  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+  border-radius: 0.75rem;
+  border: 1px solid #e2e8f0;
+  transition: all 0.2s ease;
+}
+
+.stock-legend-item:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}
+
+.stock-legend-color {
+  width: 1rem;
+  height: 1rem;
+  border-radius: 50%;
+  margin-right: 0.75rem;
+  box-shadow: 0 2px 4px -1px rgba(0, 0, 0, 0.06), 0 1px 2px -1px rgba(0, 0, 0, 0.1);
+}
+
+.stock-legend-label {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #111827;
+}
+
+.stock-legend-value {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #059669;
+}
+
+/* Tableau des performances */
+.performance-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.table-head {
+  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+}
+
+.table-header-cell {
+  padding: 1rem 1.5rem;
+  text-align: left;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.table-header-cell:first-child {
+  border-top-left-radius: 0.5rem;
+}
+
+.table-header-cell:last-child {
+  border-top-right-radius: 0.5rem;
+}
+
+.table-body {
+  background-color: #ffffff;
+}
+
+.table-row {
+  transition: all 0.2s ease;
+  border-bottom: 1px solid #f3f4f6;
+}
+
+.table-row:hover {
+  background: linear-gradient(135deg, #f9fafb 0%, #f3f4f6 100%);
+}
+
+.table-row:last-child {
+  border-bottom: none;
+}
+
+.table-cell {
+  padding: 1rem 1.5rem;
+  font-size: 0.875rem;
+  color: #374151;
+  white-space: nowrap;
+}
+
+.table-cell-primary {
+  font-weight: 600;
+  color: #111827;
+}
+
+.performance-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.25rem 0.75rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-align: center;
+}
+
+.performance-badge-excellent {
+  background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%);
+  color: #065f46;
+  border: 1px solid #34d399;
+}
+
+.performance-badge-good {
+  background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+  color: #92400e;
+  border: 1px solid #f59e0b;
+}
+
+.performance-badge-average {
+  background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);
+  color: #991b1b;
+  border: 1px solid #f87171;
+}
+
+/* Responsive */
+@media (max-width: 640px) {
+  .header-main {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1rem;
+  }
+
+  .page-title {
+    font-size: 1.875rem;
+  }
+
+  .stats-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .secondary-stats-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .charts-section {
+    grid-template-columns: 1fr;
+  }
+
+  .table-content {
+    overflow-x: auto;
+  }
+
+  .performance-table {
+    min-width: 600px;
+  }
+}
+
+@media (max-width: 480px) {
+  .main-content {
+    padding: 0 0.75rem;
+  }
+
+  .header-content {
+    padding: 1.5rem 0.75rem;
+  }
+
+  .secondary-stat-content {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.75rem;
+  }
+
+  .chart-content,
+  .table-content {
+    padding: 1rem;
+  }
+}
+
+/* Animations */
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.stat-card,
+.secondary-stat-card,
+.chart-card,
+.table-card {
+  animation: slideIn 0.3s ease-out;
+}
+
+.stat-card:nth-child(1) { animation-delay: 0.1s; }
+.stat-card:nth-child(2) { animation-delay: 0.2s; }
+.stat-card:nth-child(3) { animation-delay: 0.3s; }
+.stat-card:nth-child(4) { animation-delay: 0.4s; }
+</style>

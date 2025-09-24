@@ -12,6 +12,12 @@ const router = createRouter({
       meta: { requiresAuth: false }
     },
     {
+      path: '/register',
+      name: 'register',
+      component: () => import('../views/RegisterView.vue'),
+      meta: { requiresAuth: false }
+    },
+    {
       path: '/',
       name: 'home',
       component: HomeView,
@@ -59,16 +65,22 @@ const router = createRouter({
       component: () => import('../views/AnalysesView.vue'),
       meta: { requiresAuth: true }
     },
-    {
-      path: '/parametres',
-      name: 'parametres',
-      component: () => import('../views/ParametresView.vue'),
-      meta: { requiresAuth: true }
-    },
+        {
+          path: '/parametres',
+          name: 'parametres',
+          component: () => import('../views/ParametresView.vue'),
+          meta: { requiresAuth: true }
+        },
+        {
+          path: '/test-supabase',
+          name: 'test-supabase',
+          component: () => import('../views/TestSupabaseView.vue'),
+          meta: { requiresAuth: true }
+        },
   ],
 })
 
-// Navigation guard pour vérifier l'authentification
+// Navigation guard pour vérifier l'authentification (ancien système localStorage)
 router.beforeEach((to, from, next) => {
   const currentUser = storageService.getCurrentUser()
   

@@ -29,7 +29,7 @@
       <div class="bl-header">
         <div class="company-info">
           <div class="company-logo">
-            <img src="/logo.jpg" alt="Global Star Distribution" class="logo-image" />
+            <img :src="logo" :alt="getLogoAlt()" class="logo-image" />
           </div>
           <div class="company-details">
             <h1 class="company-name">GLOBAL STAR DISTRIBUTION</h1>
@@ -173,6 +173,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { type Livraison } from '../services/storage'
+import { useLogo } from '../composables/useLogo'
 
 interface Props {
   livraison: Livraison
@@ -182,6 +183,7 @@ const props = defineProps<Props>()
 const emit = defineEmits<{
   close: []
 }>()
+const { logo, getLogoAlt } = useLogo()
 
 const bordereauContent = ref<HTMLElement>()
 
