@@ -53,7 +53,7 @@ const handleRegister = async () => {
     await signUp(email.value, password.value, {
       first_name: firstName.value,
       last_name: lastName.value,
-      role: role.value
+        role: role.value as any
     })
     
     success.value = 'Compte créé avec succès ! Vérifiez votre email pour confirmer votre compte.'

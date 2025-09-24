@@ -1,10 +1,9 @@
 <script setup lang="ts">
 import { computed, ref, onMounted } from 'vue'
-import { 
-  WifiIcon, 
-  WifiSlashIcon, 
-  ArrowPathIcon, 
-  CheckCircleIcon, 
+import {
+  WifiIcon,
+  ArrowPathIcon,
+  CheckCircleIcon,
   ExclamationTriangleIcon,
   ClockIcon
 } from '@heroicons/vue/24/outline'
@@ -30,7 +29,7 @@ onMounted(() => {
 const syncStatus = computed(() => {
   if (!isOnline.value) {
     return {
-      icon: WifiSlashIcon,
+      icon: ExclamationTriangleIcon,
       text: 'Hors ligne',
       color: 'text-red-600',
       bgColor: 'bg-red-50',

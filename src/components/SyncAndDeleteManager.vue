@@ -15,7 +15,7 @@
       <div class="status-card">
         <div class="status-header">
           <WifiIcon v-if="isOnline" class="w-5 h-5 text-green-500" />
-          <WifiSlashIcon v-else class="w-5 h-5 text-red-500" />
+          <ExclamationTriangleIcon v-else class="w-5 h-5 text-red-500" />
           <span class="status-text">
             {{ isOnline ? 'En ligne' : 'Hors ligne' }}
           </span>
@@ -196,7 +196,6 @@ import {
   ArrowDownTrayIcon,
   TrashIcon,
   WifiIcon,
-  WifiSlashIcon,
   CheckCircleIcon,
   XCircleIcon,
   ExclamationTriangleIcon,
@@ -206,7 +205,7 @@ import {
 const {
   syncAndDelete,
   getSyncStats,
-  clearSyncedItems,
+  clearSyncedItems: clearSyncedItemsFromService,
   getSyncedItems,
   isSynced,
   markAsSynced
@@ -302,7 +301,7 @@ const pullFromSupabase = async () => {
 
 const clearSyncedItems = () => {
   if (confirm('Êtes-vous sûr de vouloir vider la liste des éléments synchronisés ?')) {
-    clearSyncedItems()
+    clearSyncedItemsFromService()
     alert('✅ Liste des éléments synchronisés vidée')
   }
 }

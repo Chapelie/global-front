@@ -29,7 +29,7 @@ export const useAuth = () => {
       }
 
       // Écouter les changements d'authentification
-      supabase.auth.onAuthStateChange((event, session) => {
+      supabase.auth.onAuthStateChange((event: any, session: any) => {
         console.log('Auth state changed:', event, session?.user?.email)
 
         if (session?.user) {

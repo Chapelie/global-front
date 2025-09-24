@@ -131,6 +131,7 @@ export interface Livraison {
     quantiteLivree: number
     difference: number
     resteAPayer: number
+    observation?: string
   }>
   statut: 'en_attente' | 'en_cours' | 'livre' | 'annule'
   adresse: string
@@ -1410,6 +1411,63 @@ class StorageService {
   // Arrêter la synchronisation automatique
   stopAutoSync() {
     supabaseSyncService.stopAutoSync()
+  }
+
+  // ===== GESTION DU PERSONNEL =====
+
+  // Obtenir tous les employés
+  getPersonnel(): Employe[] {
+    return this.getItem<Employe>(this.EMPLOYES_KEY)
+  }
+
+  // Sauvegarder les employés
+  savePersonnel(employes: Employe[]): void {
+    this.setItem(this.EMPLOYES_KEY, employes)
+  }
+
+  // Ajouter un employé
+  addPersonnel(employe: Omit<Employe, 'id'>): Employe {
+    const employes = this.getPersonnel()
+    const id = employes.length > 0 ? Math.max(...employes.map(e => e.id)) + 1 : 1
+    
+    const nouvelEmploye: Employe = {
+      ...employe,
+      id
+    }
+
+    employes.push(nouvelEmploye)
+    this.savePersonnel(employes)
+    return nouvelEmploye
+  }
+
+  // Modifier un employé
+  updatePersonnel(id: number, modifications: Partial<Employe>): void {
+    const employes = this.getPersonnel()
+    const index = employes.findIndex(e => e.id === id)
+    
+    if (index === -1) {
+      throw new Error('Employé non trouvé')
+    }
+
+    employes[index] = {
+      ...employes[index],
+      ...modifications
+    }
+
+    this.savePersonnel(employes)
+  }
+
+  // Supprimer un employé
+  deletePersonnel(id: number): void {
+    const employes = this.getPersonnel()
+    const index = employes.findIndex(e => e.id === id)
+    
+    if (index === -1) {
+      throw new Error('Employé non trouvé')
+    }
+
+    employes.splice(index, 1)
+    this.savePersonnel(employes)
   }
 }
 

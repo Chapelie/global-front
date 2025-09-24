@@ -54,7 +54,7 @@ export const useSync = () => {
   }
 
   // Ajouter une opération à la queue de synchronisation
-  const addToSyncQueue = (operation: 'create' | 'update' | 'delete', table: string, data: any) => {
+  const addToSyncQueue = async (operation: 'create' | 'update' | 'delete', table: string, data: any) => {
     const syncItem = {
       id: `${table}_${Date.now()}_${Math.random()}`,
       operation,
@@ -70,12 +70,12 @@ export const useSync = () => {
     
     // Tenter une synchronisation immédiate si en ligne
     if (isOnline.value && isAuthenticated.value) {
-      syncItem(syncItem)
+      await syncItemFunction(syncItem)
     }
   }
 
   // Synchroniser un élément spécifique
-  const syncItem = async (item: typeof syncQueue.value[0]) => {
+  const syncItemFunction = async (item: typeof syncQueue.value[0]) => {
     try {
       syncState.value.isSyncing = true
 
@@ -208,7 +208,7 @@ export const useSync = () => {
       // Synchroniser tous les éléments en queue
       const itemsToSync = [...syncQueue.value]
       for (const item of itemsToSync) {
-        await syncItem(item)
+        await syncItemFunction(item)
       }
 
       syncState.value.lastSync = new Date()

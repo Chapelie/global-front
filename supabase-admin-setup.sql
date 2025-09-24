@@ -1,4 +1,4 @@
--- Script pour créer l'utilisateur admin et configurer les rôles
+ -- Script pour créer l'utilisateur admin et configurer les rôles
 -- Exécuter après avoir créé les tables et configuré RLS
 
 -- 1. Créer l'utilisateur admin dans la table users

@@ -16,6 +16,11 @@ const emit = defineEmits<{
 }>()
 const { logo, getLogoAlt } = useLogo()
 
+// Fonction pour formater les dates
+const formatDate = (date: string | Date) => {
+  return new Date(date).toLocaleDateString('fr-FR', { year: 'numeric', month: 'long', day: 'numeric' })
+}
+
 const preuveDepot = ref('')
 const preuveReception = ref('')
 const signatureClient = ref('')

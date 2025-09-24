@@ -5,7 +5,7 @@
       <div class="status-indicator" :class="statusClass">
         <div class="status-icon">
           <WifiIcon v-if="syncStatus.isOnline && !syncStatus.isSyncing" class="w-5 h-5" />
-          <WifiSlashIcon v-else-if="!syncStatus.isOnline" class="w-5 h-5" />
+          <ExclamationTriangleIcon v-else-if="!syncStatus.isOnline" class="w-5 h-5" />
           <ArrowPathIcon v-else class="w-5 h-5 animate-spin" />
         </div>
         <div class="status-text">
@@ -169,7 +169,6 @@ import { useSupabaseSync } from '../services/supabaseSync'
 import { storageService } from '../services/storage'
 import {
   WifiIcon,
-  WifiSlashIcon,
   ArrowPathIcon,
   ArrowDownTrayIcon,
   ArrowsRightLeftIcon,
@@ -194,24 +193,24 @@ const syncInterval = ref(30)
 
 // Computed properties
 const statusClass = computed(() => {
-  if (!syncStatus.value.isOnline) return 'status-offline'
-  if (syncStatus.value.isSyncing) return 'status-syncing'
-  if (syncStatus.value.syncErrors.length > 0) return 'status-error'
+  if (!syncStatus.isOnline) return 'status-offline'
+  if (syncStatus.isSyncing) return 'status-syncing'
+  if (syncStatus.syncErrors.length > 0) return 'status-error'
   return 'status-online'
 })
 
 const statusTitle = computed(() => {
-  if (!syncStatus.value.isOnline) return 'Hors ligne'
-  if (syncStatus.value.isSyncing) return 'Synchronisation en cours...'
-  if (syncStatus.value.syncErrors.length > 0) return 'Erreurs de synchronisation'
+  if (!syncStatus.isOnline) return 'Hors ligne'
+  if (syncStatus.isSyncing) return 'Synchronisation en cours...'
+  if (syncStatus.syncErrors.length > 0) return 'Erreurs de synchronisation'
   return 'En ligne'
 })
 
 const statusSubtitle = computed(() => {
-  if (!syncStatus.value.isOnline) return 'Connexion requise pour synchroniser'
-  if (syncStatus.value.isSyncing) return `${syncStatus.value.syncProgress}% terminé`
-  if (syncStatus.value.syncErrors.length > 0) return `${syncStatus.value.syncErrors.length} erreur(s)`
-  if (syncStatus.value.pendingChanges > 0) return `${syncStatus.value.pendingChanges} changement(s) en attente`
+  if (!syncStatus.isOnline) return 'Connexion requise pour synchroniser'
+  if (syncStatus.isSyncing) return `${syncStatus.syncProgress}% terminé`
+  if (syncStatus.syncErrors.length > 0) return `${syncStatus.syncErrors.length} erreur(s)`
+  if (syncStatus.pendingChanges > 0) return `${syncStatus.pendingChanges} changement(s) en attente`
   return 'Tout est synchronisé'
 })
 
