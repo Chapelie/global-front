@@ -4,7 +4,7 @@ import type { UserRole, UserPermissions } from '../lib/supabase'
 
 // Définition des permissions par rôle
 const ROLE_PERMISSIONS: Record<UserRole, UserPermissions> = {
-  super_admin: {
+  superadmin: {
     canViewProduction: true,
     canEditProduction: true,
     canViewCommandes: true,
@@ -33,6 +33,38 @@ const ROLE_PERMISSIONS: Record<UserRole, UserPermissions> = {
     canEditPersonnel: true,
     canViewAnalyses: true,
     canViewParametres: true,
+    canEditParametres: false,
+    canManageUsers: false
+  },
+  manager: {
+    canViewProduction: true,
+    canEditProduction: true,
+    canViewCommandes: true,
+    canEditCommandes: true,
+    canViewLivraisons: true,
+    canEditLivraisons: true,
+    canViewStock: true,
+    canEditStock: true,
+    canViewPersonnel: true,
+    canEditPersonnel: false,
+    canViewAnalyses: true,
+    canViewParametres: false,
+    canEditParametres: false,
+    canManageUsers: false
+  },
+  operator: {
+    canViewProduction: true,
+    canEditProduction: false,
+    canViewCommandes: true,
+    canEditCommandes: false,
+    canViewLivraisons: true,
+    canEditLivraisons: false,
+    canViewStock: true,
+    canEditStock: false,
+    canViewPersonnel: false,
+    canEditPersonnel: false,
+    canViewAnalyses: false,
+    canViewParametres: false,
     canEditParametres: false,
     canManageUsers: false
   },
@@ -118,8 +150,10 @@ export const useRoles = () => {
   // Vérification de hiérarchie des rôles
   const isHigherRole = (targetRole: UserRole): boolean => {
     const roleHierarchy: Record<UserRole, number> = {
-      super_admin: 4,
-      admin: 3,
+      superadmin: 5,
+      admin: 4,
+      manager: 3,
+      operator: 2,
       secretaire: 2,
       livreur: 1
     }
@@ -130,8 +164,10 @@ export const useRoles = () => {
   // Nom d'affichage du rôle
   const roleDisplayName = computed(() => {
     const roleNames: Record<UserRole, string> = {
-      super_admin: 'Super Administrateur',
+      superadmin: 'Super Administrateur',
       admin: 'Administrateur',
+      manager: 'Manager',
+      operator: 'Opérateur',
       secretaire: 'Secrétaire',
       livreur: 'Livreur'
     }
@@ -141,8 +177,10 @@ export const useRoles = () => {
   // Couleur du rôle pour l'affichage
   const roleColor = computed(() => {
     const roleColors: Record<UserRole, string> = {
-      super_admin: 'text-red-600 bg-red-50',
+      superadmin: 'text-red-600 bg-red-50',
       admin: 'text-blue-600 bg-blue-50',
+      manager: 'text-purple-600 bg-purple-50',
+      operator: 'text-indigo-600 bg-indigo-50',
       secretaire: 'text-green-600 bg-green-50',
       livreur: 'text-orange-600 bg-orange-50'
     }

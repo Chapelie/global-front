@@ -20,28 +20,45 @@ export const useAuth = () => {
 
   // Initialiser l'auth listener
   const initAuth = async () => {
+    console.log('🔐 [Auth] initAuth() - Début')
+    console.log('🔍 [Auth] Supabase client:', supabase ? 'Disponible' : 'Non disponible')
+    
+    if (!supabase) {
+      console.error('❌ [Auth] Supabase client non disponible')
+      authState.value.loading = false
+      authState.value.initialized = true
+      return
+    }
+
     try {
+      console.log('📡 [Auth] Récupération de la session actuelle')
       // Récupérer la session actuelle
-      const { data: { session } } = await supabase.auth.getSession()
+      const { data: { session }, error } = await supabase.auth.getSession()
+
+      if (error) {
+        console.error('❌ [Auth] Erreur lors de la récupération de session:', error)
+      } else {
+        console.log('✅ [Auth] Session récupérée:', session ? 'Session active' : 'Aucune session')
+      }
 
       if (session?.user) {
+        console.log('👤 [Auth] Utilisateur trouvé dans la session:', session.user.email)
         authState.value.user = session.user as User
+      } else {
+        console.log('👤 [Auth] Aucun utilisateur dans la session')
       }
 
       // Écouter les changements d'authentification
+      console.log('👂 [Auth] Configuration du listener d\'authentification')
       supabase.auth.onAuthStateChange((event: any, session: any) => {
-        console.log('Auth state changed:', event, session?.user?.email)
+        console.log('🔄 [Auth] Auth state changed:', event, session?.user?.email)
 
         if (session?.user) {
+          console.log('✅ [Auth] Utilisateur connecté:', session.user.email)
           authState.value.user = session.user as User
-          // Initialiser la synchronisation quand l'utilisateur se connecte
-          if (typeof window !== 'undefined') {
-            import('./syncService').then(({ useSync }) => {
-              const { initSync } = useSync()
-              initSync()
-            })
-          }
+          // Synchronisation automatique via Supabase (plus de syncService nécessaire)
         } else {
+          console.log('❌ [Auth] Utilisateur déconnecté')
           authState.value.user = null
         }
 
@@ -50,8 +67,9 @@ export const useAuth = () => {
 
       authState.value.initialized = true
       authState.value.loading = false
+      console.log('✅ [Auth] Initialisation terminée')
     } catch (error) {
-      console.error('Erreur lors de l\'initialisation de l\'auth:', error)
+      console.error('❌ [Auth] Erreur lors de l\'initialisation de l\'auth:', error)
       authState.value.loading = false
       authState.value.initialized = true
     }
@@ -59,18 +77,24 @@ export const useAuth = () => {
 
   // Connexion avec email/mot de passe
   const signIn = async (email: string, password: string) => {
+    console.log('🔐 [Auth] signIn() - Début')
+    console.log('📧 [Auth] Email:', email)
     authState.value.loading = true
 
+    console.log('📡 [Auth] Appel Supabase: signInWithPassword()')
     const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password
     })
 
     if (error) {
+      console.error('❌ [Auth] Erreur de connexion:', error)
       authState.value.loading = false
       throw new Error(getErrorMessage(error.message))
     }
 
+    console.log('✅ [Auth] Connexion réussie:', data.user?.email)
+    console.log('👤 [Auth] User ID:', data.user?.id)
     return data
   }
 
@@ -79,7 +103,12 @@ export const useAuth = () => {
     first_name?: string
     last_name?: string
     role?: UserRole
+    phone?: string
   }) => {
+    console.log('🔐 [Auth] signUp() - Début')
+    console.log('📧 [Auth] Email:', email)
+    console.log('👤 [Auth] Métadonnées:', metadata)
+    
     authState.value.loading = true
 
     const { data, error } = await supabase.auth.signUp({
@@ -87,17 +116,41 @@ export const useAuth = () => {
       password,
       options: {
         data: {
-          ...metadata,
-          role: metadata?.role || 'secretaire' // Rôle par défaut
+          first_name: metadata?.first_name || '',
+          last_name: metadata?.last_name || '',
+          role: metadata?.role || 'secretaire', // Rôle par défaut
+          phone: metadata?.phone || '',
+          full_name: `${metadata?.first_name || ''} ${metadata?.last_name || ''}`.trim()
         }
       }
     })
 
     if (error) {
+      console.error('❌ [Auth] Erreur d\'inscription:', error)
       authState.value.loading = false
       throw new Error(getErrorMessage(error.message))
     }
 
+    console.log('✅ [Auth] Inscription réussie:', data.user?.email)
+    console.log('👤 [Auth] User ID:', data.user?.id)
+    
+    // Créer le profil utilisateur dans la table users
+    if (data.user) {
+      try {
+        await createUserProfile(data.user.id, {
+          email: data.user.email!,
+          first_name: metadata?.first_name || '',
+          last_name: metadata?.last_name || '',
+          role: metadata?.role || 'secretaire',
+          phone: metadata?.phone || ''
+        })
+      } catch (profileError) {
+        console.warn('⚠️ [Auth] Erreur lors de la création du profil:', profileError)
+        // Ne pas faire échouer l'inscription pour cette erreur
+      }
+    }
+
+    authState.value.loading = false
     return data
   }
 
@@ -205,6 +258,116 @@ export const useAuth = () => {
     return roles.includes(getCurrentRole())
   }
 
+  // Créer le profil utilisateur dans la table users
+  const createUserProfile = async (userId: string, profileData: {
+    email: string
+    first_name: string
+    last_name: string
+    role: UserRole
+    phone?: string
+  }) => {
+    console.log('👤 [Auth] createUserProfile() - Début')
+    console.log('🆔 [Auth] User ID:', userId)
+    console.log('📋 [Auth] Profil:', profileData)
+
+    const { data, error } = await supabase
+      .from('users')
+      .insert({
+        id: userId,
+        email: profileData.email,
+        first_name: profileData.first_name,
+        last_name: profileData.last_name,
+        role: profileData.role,
+        phone: profileData.phone || null,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      })
+      .select()
+      .single()
+
+    if (error) {
+      console.error('❌ [Auth] Erreur création profil:', error)
+      throw error
+    }
+
+    console.log('✅ [Auth] Profil créé:', data)
+    return data
+  }
+
+  // Obtenir le profil utilisateur complet
+  const getUserProfile = async (userId?: string) => {
+    const targetUserId = userId || authState.value.user?.id
+    if (!targetUserId) return null
+
+    console.log('👤 [Auth] getUserProfile() - Début')
+    console.log('🆔 [Auth] User ID:', targetUserId)
+
+    const { data, error } = await supabase
+      .from('users')
+      .select('*')
+      .eq('id', targetUserId)
+      .single()
+
+    if (error) {
+      console.error('❌ [Auth] Erreur récupération profil:', error)
+      return null
+    }
+
+    console.log('✅ [Auth] Profil récupéré:', data)
+    return data
+  }
+
+  // Mettre à jour le profil utilisateur
+  const updateUserProfile = async (updates: {
+    first_name?: string
+    last_name?: string
+    phone?: string
+    role?: UserRole
+  }) => {
+    const userId = authState.value.user?.id
+    if (!userId) throw new Error('Utilisateur non authentifié')
+
+    console.log('👤 [Auth] updateUserProfile() - Début')
+    console.log('🆔 [Auth] User ID:', userId)
+    console.log('📝 [Auth] Mises à jour:', updates)
+
+    const { data, error } = await supabase
+      .from('users')
+      .update({
+        ...updates,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', userId)
+      .select()
+      .single()
+
+    if (error) {
+      console.error('❌ [Auth] Erreur mise à jour profil:', error)
+      throw error
+    }
+
+    console.log('✅ [Auth] Profil mis à jour:', data)
+    return data
+  }
+
+  // Obtenir tous les utilisateurs (admin seulement)
+  const getAllUsers = async () => {
+    console.log('👥 [Auth] getAllUsers() - Début')
+
+    const { data, error } = await supabase
+      .from('users')
+      .select('*')
+      .order('created_at', { ascending: false })
+
+    if (error) {
+      console.error('❌ [Auth] Erreur récupération utilisateurs:', error)
+      throw error
+    }
+
+    console.log('✅ [Auth] Utilisateurs récupérés:', data?.length || 0)
+    return data || []
+  }
+
   return {
     // État
     user,
@@ -222,6 +385,12 @@ export const useAuth = () => {
     updatePassword,
     updateProfile,
     updateUserRole,
+
+    // Profils utilisateurs
+    createUserProfile,
+    getUserProfile,
+    updateUserProfile,
+    getAllUsers,
 
     // Rôles
     getCurrentRole,

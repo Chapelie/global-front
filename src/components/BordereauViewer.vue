@@ -29,7 +29,10 @@
       <div class="bl-header">
         <div class="company-info">
           <div class="company-logo">
-            <img :src="logo" :alt="getLogoAlt()" class="logo-image" />
+            <img v-if="logo" :src="logo" :alt="getLogoAlt()" class="logo-image" />
+            <div v-else class="logo-placeholder">
+              <span class="logo-text">GSD</span>
+            </div>
           </div>
           <div class="company-details">
             <h1 class="company-name">GLOBAL STAR DISTRIBUTION</h1>
@@ -39,8 +42,8 @@
         </div>
         <div class="bl-info">
           <h2 class="bl-title">BORDEREAU DE LIVRAISON</h2>
-          <div class="bl-number">N° {{ livraison.numeroBL }}</div>
-          <div class="bl-date">Date: {{ formatDate(livraison.dateLivraison || livraison.date) }}</div>
+          <div class="bl-number">N° {{ livraison.numeroBl }}</div>
+          <div class="bl-date">Date: {{ formatDate(livraison.date) }}</div>
         </div>
       </div>
 
@@ -73,11 +76,11 @@
             </div>
             <div class="info-item">
               <span class="info-label">Date de livraison:</span>
-              <span class="info-value">{{ formatDate(livraison.dateLivraison || livraison.date) }}</span>
+              <span class="info-value">{{ formatDate(livraison.date) }}</span>
             </div>
             <div class="info-item">
-              <span class="info-label">Heure:</span>
-              <span class="info-value">{{ livraison.heureLivraison || 'N/A' }}</span>
+              <span class="info-label">Code de suivi:</span>
+              <span class="info-value">{{ livraison.codeSuivi || 'N/A' }}</span>
             </div>
           </div>
         </div>
@@ -105,14 +108,14 @@
                 </span>
                 <span v-else>0</span>
               </div>
-              <div class="table-cell">{{ produit.unite }}</div>
+              <div class="table-cell">{{ produit.unite || 'pièce' }}</div>
             </div>
           </div>
         </div>
       </div>
 
       <!-- Preuves et observations -->
-      <div v-if="livraison.preuveDepot || livraison.preuveReception || livraison.observations" class="proofs-section">
+      <div v-if="livraison.preuveDepot || livraison.preuveReception || livraison.notes" class="proofs-section">
         <h3 class="section-title">Preuves et Observations</h3>
         
         <div v-if="livraison.preuveDepot" class="proof-item">
@@ -137,24 +140,25 @@
           </div>
         </div>
 
-        <div v-if="livraison.observations" class="proof-item">
+        <div v-if="livraison.notes" class="proof-item">
           <h4 class="proof-title">📝 Observations</h4>
-          <p class="proof-text">{{ livraison.observations }}</p>
+          <p class="proof-text">{{ livraison.notes }}</p>
         </div>
       </div>
 
       <!-- Signatures -->
       <div class="signatures-section">
         <div class="signature-item">
-          <div class="signature-label">Signature du chauffeur</div>
+          <div class="signature-label">Livreur</div>
           <div class="signature-line"></div>
-          <div class="signature-name">{{ livraison.chauffeur }}</div>
+          <div v-if="livraison.signatureChauffeur" class="signature-image">
+            <img :src="livraison.signatureChauffeur" alt="Signature du livreur" />
+          </div>
         </div>
         
         <div class="signature-item">
-          <div class="signature-label">Signature du client</div>
+          <div class="signature-label">Client</div>
           <div class="signature-line"></div>
-          <div class="signature-name">{{ livraison.client }}</div>
           <div v-if="livraison.signatureClient" class="signature-image">
             <img :src="livraison.signatureClient" alt="Signature du client" />
           </div>
@@ -172,11 +176,11 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
-import { type Livraison } from '../services/storage'
+import { type CompleteLivraison } from '../services/completeHybridService'
 import { useLogo } from '../composables/useLogo'
 
 interface Props {
-  livraison: Livraison
+  livraison: CompleteLivraison
 }
 
 const props = defineProps<Props>()
@@ -240,7 +244,7 @@ const telechargerPDF = async () => {
     
     const opt = {
       margin: 1,
-      filename: `BL-${props.livraison.numeroBL}.pdf`,
+      filename: `BL-${props.livraison.numeroBl}.pdf`,
       image: { type: 'jpeg', quality: 0.98 },
       html2canvas: { scale: 2 },
       jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
@@ -279,12 +283,12 @@ const telechargerHTML = () => {
     <html>
     <head>
       <meta charset="UTF-8">
-      <title>BL-${props.livraison.numeroBL}</title>
+      <title>BL-${props.livraison.numeroBl}</title>
       <style>
         body { font-family: Arial, sans-serif; margin: 20px; }
         .bordereau-content { max-width: 800px; margin: 0 auto; }
-        .bl-header { text-align: center; border-bottom: 2px solid #f97316; padding-bottom: 20px; margin-bottom: 30px; }
-        .company-name { font-size: 24px; font-weight: bold; color: #f97316; margin: 10px 0; }
+        .bl-header { text-align: center; border-bottom: 2px solid #374151; padding-bottom: 20px; margin-bottom: 30px; }
+        .company-name { font-size: 24px; font-weight: bold; color: #111827; margin: 10px 0; }
         .bl-title { font-size: 20px; font-weight: bold; margin: 10px 0; }
         .info-sections { display: grid; grid-template-columns: 1fr 1fr; gap: 30px; margin-bottom: 30px; }
         .info-section { margin-bottom: 20px; }
@@ -312,7 +316,7 @@ const telechargerHTML = () => {
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
-  a.download = `BL-${props.livraison.numeroBL}.html`
+  a.download = `BL-${props.livraison.numeroBl}.html`
   document.body.appendChild(a)
   a.click()
   document.body.removeChild(a)
@@ -371,7 +375,7 @@ const imprimer = () => {
   gap: 2rem;
   margin-bottom: 2rem;
   padding-bottom: 1.5rem;
-  border-bottom: 2px solid #f97316;
+  border-bottom: 2px solid #374151;
 }
 
 .company-info {
@@ -391,10 +395,27 @@ const imprimer = () => {
   object-fit: contain;
 }
 
+.logo-placeholder {
+  width: 100%;
+  height: 100%;
+  background-color: #f3f4f6;
+  border: 2px solid #d1d5db;
+  border-radius: 0.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.logo-text {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #6b7280;
+}
+
 .company-name {
   font-size: 1.5rem;
   font-weight: 700;
-  color: #f97316;
+  color: #111827;
   margin: 0.25rem 0;
 }
 
@@ -437,10 +458,10 @@ const imprimer = () => {
 }
 
 .info-section {
-  background-color: #f9fafb;
-  border-radius: 0.75rem;
+  background-color: #ffffff;
+  border-radius: 0.5rem;
   padding: 1.5rem;
-  border: 1px solid #e5e7eb;
+  border: 1px solid #d1d5db;
 }
 
 .section-title {
@@ -485,8 +506,8 @@ const imprimer = () => {
 .table-header {
   display: grid;
   grid-template-columns: 2fr 1fr 1fr 1fr 1fr;
-  background-color: #f9fafb;
-  border-bottom: 1px solid #e5e7eb;
+  background-color: #f3f4f6;
+  border-bottom: 1px solid #d1d5db;
 }
 
 .header-cell {
@@ -660,12 +681,12 @@ const imprimer = () => {
 }
 
 .btn-primary {
-  background-color: #f97316;
+  background-color: #374151;
   color: #ffffff;
 }
 
 .btn-primary:hover {
-  background-color: #ea580c;
+  background-color: #1f2937;
 }
 
 .btn-secondary {

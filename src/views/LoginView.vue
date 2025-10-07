@@ -1,45 +1,47 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { storageService } from '../services/storage'
+import { useAuth } from '../services/auth'
 import { useLogo } from '../composables/useLogo'
 import { CubeIcon } from '@heroicons/vue/24/outline'
 
 const router = useRouter()
 const { logo, getLogoAlt, getLogoClass } = useLogo()
+const { signIn, isLoading } = useAuth()
 
-const username = ref('')
+const email = ref('')
 const password = ref('')
 const error = ref('')
-const isLoading = ref(false)
+const success = ref('')
 
 const handleLogin = async () => {
-  if (!username.value || !password.value) {
+  if (!email.value || !password.value) {
     error.value = 'Veuillez remplir tous les champs'
     return
   }
 
-  isLoading.value = true
   error.value = ''
+  success.value = ''
 
   try {
-    const user = storageService.login(username.value, password.value)
+    console.log('🔐 [LoginView] Tentative de connexion')
+    console.log('📧 [LoginView] Email:', email.value)
     
-    if (user) {
-      // Redirection vers le dashboard
+    await signIn(email.value, password.value)
+    
+    console.log('✅ [LoginView] Connexion réussie')
+    success.value = 'Connexion réussie ! Redirection...'
+    
+    // Redirection vers le dashboard après un court délai
+    setTimeout(() => {
       router.push('/')
-    } else {
-      error.value = 'Nom d\'utilisateur ou mot de passe incorrect'
-    }
-  } catch (err) {
-    error.value = 'Erreur lors de la connexion'
-  } finally {
-    isLoading.value = false
+    }, 1000)
+    
+  } catch (err: any) {
+    console.error('❌ [LoginView] Erreur de connexion:', err)
+    error.value = err.message || 'Erreur lors de la connexion'
   }
 }
-
-// Initialiser les données par défaut au chargement
-storageService.initializeDefaultData()
 </script>
 
 <template>
@@ -60,18 +62,18 @@ storageService.initializeDefaultData()
       <div class="bg-white py-8 px-4 shadow-xl rounded-2xl sm:px-10">
         <form @submit.prevent="handleLogin" class="space-y-6">
           <div>
-            <label for="username" class="block text-sm font-medium text-gray-700">
-              Nom d'utilisateur
+            <label for="email" class="block text-sm font-medium text-gray-700">
+              Adresse email
             </label>
             <div class="mt-1">
-              <input
-                id="username"
-                v-model="username"
-                name="username"
-                type="text"
+              <input 
+                id="email"
+                v-model="email"
+                name="email"
+                type="email"
                 required
                 class="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-lg placeholder-gray-400 focus:outline-none focus:ring-orange-500 focus:border-orange-500"
-                placeholder="Entrez votre nom d'utilisateur"
+                placeholder="Entrez votre adresse email"
               />
             </div>
           </div>
@@ -97,6 +99,10 @@ storageService.initializeDefaultData()
             <p class="text-sm text-red-600">{{ error }}</p>
           </div>
 
+          <div v-if="success" class="bg-green-50 border border-green-200 rounded-lg p-3">
+            <p class="text-sm text-green-600">{{ success }}</p>
+          </div>
+
           <div>
             <button
               type="submit"
@@ -120,22 +126,22 @@ storageService.initializeDefaultData()
               <div class="w-full border-t border-gray-300" />
             </div>
             <div class="relative flex justify-center text-sm">
-              <span class="px-2 bg-white text-gray-500">Comptes de démonstration</span>
+              <span class="px-2 bg-white text-gray-500">Authentification Supabase</span>
             </div>
           </div>
 
           <div class="mt-6 space-y-3">
-            <div class="bg-gray-50 rounded-lg p-3">
-              <p class="text-xs font-medium text-gray-700">Super Admin</p>
-              <p class="text-xs text-gray-600">admin / admin123</p>
+            <div class="bg-blue-50 rounded-lg p-3">
+              <p class="text-xs font-medium text-blue-700">Connexion Supabase</p>
+              <p class="text-xs text-blue-600">Utilisez vos identifiants Supabase</p>
             </div>
             <div class="bg-gray-50 rounded-lg p-3">
-              <p class="text-xs font-medium text-gray-700">Manager</p>
-              <p class="text-xs text-gray-600">manager / manager123</p>
-            </div>
-            <div class="bg-gray-50 rounded-lg p-3">
-              <p class="text-xs font-medium text-gray-700">Secrétaire</p>
-              <p class="text-xs text-gray-600">secretaire / secretaire123</p>
+              <p class="text-xs font-medium text-gray-700">Pas de compte ?</p>
+              <p class="text-xs text-gray-600">
+                <router-link to="/register" class="text-orange-600 hover:text-orange-500">
+                  Créer un compte
+                </router-link>
+              </p>
             </div>
           </div>
         </div>

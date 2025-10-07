@@ -3,6 +3,11 @@ import { createClient } from '@supabase/supabase-js'
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
 
+// Debug des variables d'environnement
+console.log('🔍 [Supabase] Variables d\'environnement:')
+console.log('🔍 [Supabase] VITE_SUPABASE_URL:', supabaseUrl)
+console.log('🔍 [Supabase] VITE_SUPABASE_ANON_KEY:', supabaseAnonKey ? 'Défini' : 'Non défini')
+
 // Configuration gracieuse - ne pas planter l'app si Supabase n'est pas configuré
 let supabase: any = null
 
@@ -17,13 +22,16 @@ if (supabaseUrl && supabaseAnonKey &&
         detectSessionInUrl: true
       }
     })
-    console.log('✅ Supabase configuré avec succès')
+    console.log('✅ [Supabase] Client créé avec succès')
+    console.log('✅ [Supabase] URL:', supabaseUrl)
   } catch (error) {
-    console.warn('⚠️ Erreur de configuration Supabase:', error)
+    console.error('❌ [Supabase] Erreur de configuration:', error)
     console.log('📱 L\'application fonctionnera en mode hors ligne uniquement')
   }
 } else {
-  console.warn('⚠️ Supabase non configuré - Mode hors ligne uniquement')
+  console.warn('⚠️ [Supabase] Configuration manquante ou invalide')
+  console.warn('⚠️ [Supabase] URL valide:', !!supabaseUrl && supabaseUrl !== 'https://your-project.supabase.co')
+  console.warn('⚠️ [Supabase] Clé valide:', !!supabaseAnonKey && supabaseAnonKey !== 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.your-anon-key-here')
   console.log('💡 Pour activer la synchronisation, configurez vos clés Supabase dans .env.local')
 }
 
@@ -43,7 +51,7 @@ export interface User {
 }
 
 // Types de rôles utilisateur
-export type UserRole = 'super_admin' | 'admin' | 'secretaire' | 'livreur'
+export type UserRole = 'superadmin' | 'admin' | 'manager' | 'operator' | 'secretaire' | 'livreur'
 
 // Interface pour les permissions
 export interface UserPermissions {
@@ -71,7 +79,7 @@ export interface AuthState {
 
 // Types pour les données métier (basés sur votre storageService existant)
 export interface Production {
-  id?: number
+  id?: string
   date: string
   lotId: string
   statut: 'en_attente' | 'en_cours' | 'termine' | 'annule'
@@ -87,7 +95,7 @@ export interface Production {
 }
 
 export interface Commande {
-  id?: number
+  id?: string
   numeroCommande: string
   client: string
   telephone: string
@@ -106,7 +114,7 @@ export interface Commande {
 }
 
 export interface Livraison {
-  id?: number
+  id?: string
   numeroBL: string
   date: string
   client: string
@@ -132,7 +140,7 @@ export interface Livraison {
 }
 
 export interface Article {
-  id?: number
+  id?: string
   nom: string
   stock: number
   unite: string
@@ -143,7 +151,7 @@ export interface Article {
 }
 
 export interface Personnel {
-  id?: number
+  id?: string
   nom: string
   prenom: string
   poste: string

@@ -9,34 +9,34 @@ export const ROUTE_PERMISSIONS: Record<string, {
   redirectTo?: string
 }> = {
   '/': {
-    requiredRoles: ['super_admin', 'admin', 'secretaire', 'livreur']
+    requiredRoles: ['superadmin', 'admin', 'secretaire', 'livreur']
   },
   '/production': {
-    requiredRoles: ['super_admin', 'admin', 'secretaire'],
+    requiredRoles: ['superadmin', 'admin', 'secretaire'],
     requiredPermissions: ['canViewProduction']
   },
   '/commandes': {
-    requiredRoles: ['super_admin', 'admin', 'secretaire', 'livreur'],
+    requiredRoles: ['superadmin', 'admin', 'secretaire', 'livreur'],
     requiredPermissions: ['canViewCommandes']
   },
   '/livraison': {
-    requiredRoles: ['super_admin', 'admin', 'secretaire', 'livreur'],
+    requiredRoles: ['superadmin', 'admin', 'secretaire', 'livreur'],
     requiredPermissions: ['canViewLivraisons']
   },
   '/stock': {
-    requiredRoles: ['super_admin', 'admin', 'secretaire'],
+    requiredRoles: ['superadmin', 'admin', 'secretaire'],
     requiredPermissions: ['canViewStock']
   },
   '/personnel': {
-    requiredRoles: ['super_admin', 'admin', 'secretaire'],
+    requiredRoles: ['superadmin', 'admin', 'secretaire'],
     requiredPermissions: ['canViewPersonnel']
   },
   '/analyses': {
-    requiredRoles: ['super_admin', 'admin', 'secretaire'],
+    requiredRoles: ['superadmin', 'admin', 'secretaire'],
     requiredPermissions: ['canViewAnalyses']
   },
   '/parametres': {
-    requiredRoles: ['super_admin', 'admin'],
+    requiredRoles: ['superadmin', 'admin'],
     requiredPermissions: ['canViewParametres']
   }
 }
@@ -87,7 +87,7 @@ export const checkRoutePermissions = (to: RouteLocationNormalized): {
 export const adminGuard = (to: RouteLocationNormalized) => {
   const { hasRole } = useRoles()
   
-  if (!hasRole('super_admin') && !hasRole('admin')) {
+  if (!hasRole('superadmin') && !hasRole('admin')) {
     return {
       allowed: false,
       redirectTo: '/',
@@ -102,7 +102,7 @@ export const adminGuard = (to: RouteLocationNormalized) => {
 export const userManagementGuard = (to: RouteLocationNormalized) => {
   const { hasRole } = useRoles()
   
-  if (!hasRole('super_admin')) {
+  if (!hasRole('superadmin')) {
     return {
       allowed: false,
       redirectTo: '/',

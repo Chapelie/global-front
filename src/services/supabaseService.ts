@@ -11,23 +11,44 @@ export class SupabaseService {
   // ===== GESTION DES ARTICLES =====
   
   async getArticles(): Promise<Article[]> {
+    console.log('🔍 [SupabaseService] getArticles() - Début')
     const userId = this.getCurrentUserId()
-    if (!userId) throw new Error('Utilisateur non authentifié')
+    console.log('👤 [SupabaseService] User ID:', userId)
+    
+    if (!userId) {
+      console.error('❌ [SupabaseService] Utilisateur non authentifié')
+      throw new Error('Utilisateur non authentifié')
+    }
 
+    console.log('📡 [SupabaseService] Appel Supabase: articles.select()')
     const { data, error } = await supabase
       .from('articles')
       .select('*')
       .eq('user_id', userId)
       .order('created_at', { ascending: false })
 
-    if (error) throw error
+    if (error) {
+      console.error('❌ [SupabaseService] Erreur Supabase:', error)
+      throw error
+    }
+    
+    console.log('✅ [SupabaseService] Articles récupérés:', data?.length || 0)
     return data || []
   }
 
   async addArticle(article: Omit<Article, 'id' | 'user_id'>): Promise<Article> {
+    console.log('🔍 [SupabaseService] addArticle() - Début')
     const userId = this.getCurrentUserId()
-    if (!userId) throw new Error('Utilisateur non authentifié')
+    console.log('👤 [SupabaseService] User ID:', userId)
+    
+    if (!userId) {
+      console.error('❌ [SupabaseService] Utilisateur non authentifié')
+      throw new Error('Utilisateur non authentifié')
+    }
 
+    console.log('📡 [SupabaseService] Appel Supabase: articles.insert()')
+    console.log('📦 [SupabaseService] Données à insérer:', { ...article, user_id: userId })
+    
     const { data, error } = await supabase
       .from('articles')
       .insert({
@@ -37,7 +58,12 @@ export class SupabaseService {
       .select()
       .single()
 
-    if (error) throw error
+    if (error) {
+      console.error('❌ [SupabaseService] Erreur Supabase:', error)
+      throw error
+    }
+    
+    console.log('✅ [SupabaseService] Article créé:', data)
     return data
   }
 
@@ -473,7 +499,7 @@ export class SupabaseService {
 
   async mettreAJourQuantitesLivrees(idLivraison: number, quantitesLivrees: Array<{ nom: string, quantite: number }>): Promise<Livraison> {
     const livraison = await this.getLivraisons()
-    const livraisonToUpdate = livraison.find(l => l.id === idLivraison)
+    const livraisonToUpdate = livraison.find(l => l.id === idLivraison.toString())
     
     if (!livraisonToUpdate) {
       throw new Error('Livraison non trouvée')

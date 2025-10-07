@@ -18,14 +18,25 @@ export const APP_CONFIG = {
   }
 }
 
-// Vérifier si Supabase est configuré (même logique que supabase.ts)
+// Vérifier si Supabase est configuré
 export const isSupabaseConfigured = () => {
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
   const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
   
-  return supabaseUrl && supabaseAnonKey && 
-         supabaseUrl !== 'https://your-project.supabase.co' && 
-         supabaseAnonKey !== 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.your-anon-key-here'
+  // Vérifier que les variables d'environnement sont définies et non vides
+  const isConfigured = supabaseUrl && supabaseAnonKey && 
+                      supabaseUrl.trim() !== '' && 
+                      supabaseAnonKey.trim() !== '' &&
+                      supabaseUrl.startsWith('https://') &&
+                      supabaseAnonKey.startsWith('eyJ')
+  
+  console.log('🔍 [AppConfig] Vérification Supabase:', {
+    supabaseUrl: supabaseUrl ? 'Défini' : 'Non défini',
+    supabaseAnonKey: supabaseAnonKey ? 'Défini' : 'Non défini',
+    isConfigured
+  })
+  
+  return isConfigured
 }
 
 // Initialiser la configuration

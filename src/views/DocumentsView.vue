@@ -1,575 +1,569 @@
-<script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
-import { storageService, type Livraison } from '../services/storage'
-import {
-  PlusIcon,
-  TrashIcon,
-  DocumentTextIcon,
-  ArrowDownTrayIcon,
-  EyeIcon,
-  CalendarIcon,
-  UserIcon,
-  TruckIcon,
-  ClipboardDocumentIcon,
-  FolderIcon,
-  MagnifyingGlassIcon,
-  FunnelIcon
-} from '@heroicons/vue/24/outline'
-
-interface Document {
-  id: number | string
-  nom: string
-  type: 'BL' | 'Facture' | 'Planification' | 'Certificat' | 'Contrat' | 'Rapport' | 'Autre'
-  taille: string
-  dateCreation: string
-  createur: string
-  description?: string
-  url?: string
-  livraisonId?: number
-  statut?: 'draft' | 'genere' | 'envoye' | 'signe'
-  client?: string
-}
-
-const livraisons = ref<Livraison[]>([])
-const documentsUploades = ref<Document[]>([
-  {
-    id: 'doc_1',
-    nom: 'Facture_Briqueterie_Janvier_2024.pdf',
-    type: 'Facture',
-    taille: '2.5 MB',
-    dateCreation: '2024-01-15',
-    createur: 'Admin',
-    description: 'Facture fournisseur briqueterie',
-    statut: 'genere'
-  },
-  {
-    id: 'doc_2',
-    nom: 'Plan_Production_Semaine_3.xlsx',
-    type: 'Planification',
-    taille: '1.2 MB',
-    dateCreation: '2024-01-14',
-    createur: 'Manager',
-    description: 'Planning de production semaine 3',
-    statut: 'genere'
-  }
-])
-
-// Documents générés automatiquement depuis les livraisons (BL)
-const documentsGeneres = computed(() => {
-  return livraisons.value
-    .filter(l => l.statut === 'livre' || l.statut === 'en_cours')
-    .map(livraison => ({
-      id: `bl_${livraison.id}`,
-      nom: `BL_${livraison.numeroBL}_${livraison.client.replace(/\s+/g, '_')}.pdf`,
-      type: 'BL' as const,
-      taille: '0.8 MB',
-      dateCreation: livraison.dateLivraison || livraison.date,
-      createur: 'Système',
-      description: `Bordereau de livraison pour ${livraison.client}`,
-      livraisonId: livraison.id,
-      statut: livraison.signatureClient ? ('signe' as const) : ('genere' as const),
-      client: livraison.client
-    }))
-})
-
-// Tous les documents (uploadés + générés)
-const tousLesDocuments = computed(() => {
-  return [...documentsUploades.value, ...documentsGeneres.value]
-    .sort((a, b) => new Date(b.dateCreation).getTime() - new Date(a.dateCreation).getTime())
-})
-
-const showUploadModal = ref(false)
-const selectedFile = ref<File | null>(null)
-const documentType = ref('')
-const documentDescription = ref('')
-const searchTerm = ref('')
-const selectedTypeFilter = ref('')
-const selectedStatutFilter = ref('')
-const activeTab = ref<'tous' | 'bl' | 'uploads'>('tous')
-
-const types = [
-  'Facture',
-  'Planification',
-  'Certificat',
-  'Contrat',
-  'Rapport',
-  'Autre'
-]
-
-const statuts = [
-  { value: 'draft', label: 'Brouillon', color: 'bg-gray-100 text-gray-800' },
-  { value: 'genere', label: 'Généré', color: 'bg-blue-100 text-blue-800' },
-  { value: 'envoye', label: 'Envoyé', color: 'bg-orange-100 text-orange-800' },
-  { value: 'signe', label: 'Signé', color: 'bg-green-100 text-green-800' }
-]
-
-// Documents filtrés
-const documentsFiltres = computed(() => {
-  let docs = tousLesDocuments.value
-
-  // Filtrage par onglet
-  if (activeTab.value === 'bl') {
-    docs = docs.filter(d => d.type === 'BL')
-  } else if (activeTab.value === 'uploads') {
-    docs = docs.filter(d => d.type !== 'BL')
-  }
-
-  // Filtrage par recherche
-  if (searchTerm.value) {
-    docs = docs.filter(d =>
-      d.nom.toLowerCase().includes(searchTerm.value.toLowerCase()) ||
-      d.client?.toLowerCase().includes(searchTerm.value.toLowerCase()) ||
-      d.description?.toLowerCase().includes(searchTerm.value.toLowerCase())
-    )
-  }
-
-  // Filtrage par type
-  if (selectedTypeFilter.value) {
-    docs = docs.filter(d => d.type === selectedTypeFilter.value)
-  }
-
-  // Filtrage par statut
-  if (selectedStatutFilter.value) {
-    docs = docs.filter(d => d.statut === selectedStatutFilter.value)
-  }
-
-  return docs
-})
-
-const loadLivraisons = () => {
-  livraisons.value = storageService.getLivraisons()
-}
-
-const uploadDocument = () => {
-  if (selectedFile.value) {
-    const newDoc: Document = {
-      id: `upload_${Date.now()}`,
-      nom: selectedFile.value.name,
-      type: documentType.value as Document['type'],
-      taille: `${(selectedFile.value.size / 1024 / 1024).toFixed(1)} MB`,
-      dateCreation: new Date().toISOString().split('T')[0],
-      createur: 'Utilisateur',
-      description: documentDescription.value,
-      statut: 'genere'
-    }
-    documentsUploades.value.push(newDoc)
-    showUploadModal.value = false
-    selectedFile.value = null
-    documentType.value = ''
-    documentDescription.value = ''
-    alert('Document uploadé avec succès!')
-  }
-}
-
-const deleteDocument = (id: number | string) => {
-  if (confirm('Êtes-vous sûr de vouloir supprimer ce document ?')) {
-    if (typeof id === 'string' && id.startsWith('bl_')) {
-      alert('Les bordereaux de livraison ne peuvent pas être supprimés')
-      return
-    }
-    documentsUploades.value = documentsUploades.value.filter(d => d.id !== id)
-  }
-}
-
-const downloadDocument = (document: Document) => {
-  if (document.type === 'BL' && document.livraisonId) {
-    const livraison = livraisons.value.find(l => l.id === document.livraisonId)
-    if (livraison) {
-      // Ici on peut appeler la même logique que dans LivraisonView
-      alert(`Génération du BL pour ${livraison.client}...`)
-      // Implementation réelle du téléchargement BL
-      return
-    }
-  }
-
-  // Simulation de téléchargement pour autres documents
-  alert(`Téléchargement de ${document.nom}`)
-}
-
-const getStatutInfo = (statut?: string) => {
-  return statuts.find(s => s.value === statut) || statuts[0]
-}
-
-// Initialisation
-onMounted(() => {
-  loadLivraisons()
-})
-</script>
-
 <template>
-  <div class="space-y-8">
-    <!-- En-tête amélioré -->
-    <div class="bg-gradient-to-r from-indigo-50 to-purple-50 rounded-3xl p-8 border border-indigo-100">
-      <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between">
-        <div class="mb-6 lg:mb-0">
-          <div class="flex items-center mb-3">
-            <div class="h-12 w-12 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center mr-4">
-              <FolderIcon class="h-6 w-6 text-white" />
+  <div class="documents-container">
+    <!-- Header moderne -->
+    <div class="documents-header">
+      <div class="header-content">
+        <div class="header-main">
+          <div class="flex items-center">
+            <div class="h-12 w-12 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-500 flex items-center justify-center mr-4 shadow-lg">
+              <DocumentTextIcon class="h-6 w-6 text-white" />
             </div>
             <div>
-              <h1 class="text-3xl font-bold text-gray-900">Gestion des Documents</h1>
-              <p class="text-gray-600 font-medium">BL générés et documents uploadés</p>
-            </div>
-          </div>
-          <div class="flex items-center space-x-6 text-sm">
-            <div class="flex items-center text-gray-600">
-              <ClipboardDocumentIcon class="h-4 w-4 mr-1" />
-              <span>{{ documentsGeneres.length }} BL générés</span>
-            </div>
-            <div class="flex items-center text-gray-600">
-              <DocumentTextIcon class="h-4 w-4 mr-1" />
-              <span>{{ documentsUploades.length }} documents uploadés</span>
-            </div>
-          </div>
-        </div>
-        <button
-          @click="showUploadModal = true"
-          class="inline-flex items-center px-6 py-3 bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-600 hover:to-purple-600 text-white font-semibold rounded-2xl transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
-        >
-          <PlusIcon class="h-5 w-5 mr-2" />
-          Upload document
-        </button>
-      </div>
-    </div>
-
-    <!-- Statistiques améliorées -->
-    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-      <div class="bg-white rounded-3xl shadow-lg hover:shadow-xl transition-all duration-300 p-6 border border-gray-100 group hover:border-blue-200">
-        <div class="flex items-center justify-between">
-          <div>
-            <div class="h-14 w-14 rounded-2xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform duration-200">
-              <DocumentTextIcon class="h-7 w-7 text-white" />
-            </div>
-            <p class="text-sm font-semibold text-gray-600 uppercase tracking-wide">Total documents</p>
-            <p class="text-3xl font-bold text-gray-900 mt-1">{{ tousLesDocuments.length }}</p>
-          </div>
-          <div class="text-right">
-            <div class="h-2 w-16 bg-blue-200 rounded-full overflow-hidden">
-              <div class="h-full bg-gradient-to-r from-blue-500 to-blue-600 rounded-full" style="width: 100%"></div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div class="bg-white rounded-3xl shadow-lg hover:shadow-xl transition-all duration-300 p-6 border border-gray-100 group hover:border-green-200">
-        <div class="flex items-center justify-between">
-          <div>
-            <div class="h-14 w-14 rounded-2xl bg-gradient-to-br from-green-500 to-green-600 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform duration-200">
-              <TruckIcon class="h-7 w-7 text-white" />
-            </div>
-            <p class="text-sm font-semibold text-gray-600 uppercase tracking-wide">BL générés</p>
-            <p class="text-3xl font-bold text-gray-900 mt-1">{{ documentsGeneres.length }}</p>
-          </div>
-          <div class="text-right">
-            <div class="h-2 w-16 bg-green-200 rounded-full overflow-hidden">
-              <div class="h-full bg-gradient-to-r from-green-500 to-green-600 rounded-full" :style="{ width: `${Math.round((documentsGeneres.length / Math.max(tousLesDocuments.length, 1)) * 100)}%` }"></div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div class="bg-white rounded-3xl shadow-lg hover:shadow-xl transition-all duration-300 p-6 border border-gray-100 group hover:border-orange-200">
-        <div class="flex items-center justify-between">
-          <div>
-            <div class="h-14 w-14 rounded-2xl bg-gradient-to-br from-orange-500 to-orange-600 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform duration-200">
-              <CalendarIcon class="h-7 w-7 text-white" />
-            </div>
-            <p class="text-sm font-semibold text-gray-600 uppercase tracking-wide">Ce mois</p>
-            <p class="text-3xl font-bold text-gray-900 mt-1">
-              {{ tousLesDocuments.filter(d => new Date(d.dateCreation).getMonth() === new Date().getMonth()).length }}
-            </p>
-          </div>
-          <div class="text-right">
-            <div class="h-2 w-16 bg-orange-200 rounded-full overflow-hidden">
-              <div class="h-full bg-gradient-to-r from-orange-500 to-orange-600 rounded-full" style="width: 70%"></div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div class="bg-white rounded-3xl shadow-lg hover:shadow-xl transition-all duration-300 p-6 border border-gray-100 group hover:border-purple-200">
-        <div class="flex items-center justify-between">
-          <div>
-            <div class="h-14 w-14 rounded-2xl bg-gradient-to-br from-purple-500 to-purple-600 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform duration-200">
-              <UserIcon class="h-7 w-7 text-white" />
-            </div>
-            <p class="text-sm font-semibold text-gray-600 uppercase tracking-wide">Types</p>
-            <p class="text-3xl font-bold text-gray-900 mt-1">{{ new Set(tousLesDocuments.map(d => d.type)).size }}</p>
-          </div>
-          <div class="text-right">
-            <div class="h-2 w-16 bg-purple-200 rounded-full overflow-hidden">
-              <div class="h-full bg-gradient-to-r from-purple-500 to-purple-600 rounded-full" style="width: 85%"></div>
+              <h1 class="page-title">Documents</h1>
+              <p class="page-subtitle">Gestion de vos bons de livraison et documents</p>
             </div>
           </div>
         </div>
       </div>
     </div>
 
-    <!-- Onglets et filtres -->
-    <div class="bg-white rounded-3xl shadow-lg p-8 border border-gray-100">
-      <!-- Navigation par onglets -->
-      <div class="mb-6">
-        <nav class="flex space-x-8 border-b border-gray-200">
-          <button
-            @click="activeTab = 'tous'"
-            :class="activeTab === 'tous' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
-            class="whitespace-nowrap py-2 px-1 border-b-2 font-medium text-sm transition-colors"
-          >
-            Tous les documents ({{ tousLesDocuments.length }})
-          </button>
-          <button
-            @click="activeTab = 'bl'"
-            :class="activeTab === 'bl' ? 'border-green-500 text-green-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
-            class="whitespace-nowrap py-2 px-1 border-b-2 font-medium text-sm transition-colors"
-          >
-            Bordereaux de livraison ({{ documentsGeneres.length }})
-          </button>
-          <button
-            @click="activeTab = 'uploads'"
-            :class="activeTab === 'uploads' ? 'border-purple-500 text-purple-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
-            class="whitespace-nowrap py-2 px-1 border-b-2 font-medium text-sm transition-colors"
-          >
-            Documents uploadés ({{ documentsUploades.length }})
-          </button>
-        </nav>
+    <div class="main-content">
+      <!-- KPI Cards modernisés -->
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-content">
+            <div class="stat-icon-wrapper stat-blue">
+              <DocumentTextIcon class="stat-icon" />
+            </div>
+            <div class="stat-details">
+              <dt class="stat-label">Total documents</dt>
+              <dd class="stat-value">{{ documents.length }}</dd>
+              <dd class="stat-unit">documents</dd>
+            </div>
+          </div>
+        </div>
+
+        <div class="stat-card">
+          <div class="stat-content">
+            <div class="stat-icon-wrapper stat-green">
+              <TruckIcon class="stat-icon" />
+            </div>
+            <div class="stat-details">
+              <dt class="stat-label">Bons de livraison</dt>
+              <dd class="stat-value">{{ bonsDeLivraison.length }}</dd>
+              <dd class="stat-unit">BL</dd>
+            </div>
+          </div>
+        </div>
+
+        <div class="stat-card">
+          <div class="stat-content">
+            <div class="stat-icon-wrapper stat-purple">
+              <ArrowUpIcon class="stat-icon" />
+            </div>
+            <div class="stat-details">
+              <dt class="stat-label">Espace utilisé</dt>
+              <dd class="stat-value">{{ formatSize(totalSize) }}</dd>
+              <dd class="stat-unit">stockage</dd>
+            </div>
+          </div>
+        </div>
       </div>
 
-      <!-- Filtres -->
-      <div class="flex flex-col sm:flex-row items-center space-y-3 sm:space-y-0 sm:space-x-4 mb-6">
-        <div class="relative w-full sm:w-auto flex-1">
-          <MagnifyingGlassIcon class="h-5 w-5 text-gray-400 absolute left-3 top-1/2 transform -translate-y-1/2" />
-          <input
-            v-model="searchTerm"
-            type="text"
-            placeholder="Rechercher un document..."
-            class="w-full pl-10 pr-4 py-3 rounded-2xl border border-gray-300 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-all duration-200"
-          />
-        </div>
-        <div class="relative w-full sm:w-auto">
-          <FunnelIcon class="h-5 w-5 text-gray-400 absolute left-3 top-1/2 transform -translate-y-1/2" />
-          <select
-            v-model="selectedTypeFilter"
-            class="w-full sm:w-48 pl-10 pr-8 py-3 rounded-2xl border border-gray-300 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-all duration-200 appearance-none bg-white"
-          >
-            <option value="">Tous les types</option>
-            <option value="BL">Bordereaux de livraison</option>
-            <option v-for="type in types" :key="type" :value="type">
-              {{ type }}
-            </option>
-          </select>
-        </div>
-        <div class="relative w-full sm:w-auto">
-          <select
-            v-model="selectedStatutFilter"
-            class="w-full sm:w-40 pl-4 pr-8 py-3 rounded-2xl border border-gray-300 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-all duration-200 appearance-none bg-white"
-          >
-            <option value="">Tous les statuts</option>
-            <option v-for="statut in statuts" :key="statut.value" :value="statut.value">
-              {{ statut.label }}
-            </option>
-          </select>
+      <!-- Filtres modernisés -->
+      <div class="filters-section">
+        <div class="filters-grid">
+          <div class="filter-group">
+            <label class="filter-label">Recherche</label>
+            <input
+              v-model="searchTerm"
+              type="text"
+              placeholder="Rechercher un document..."
+              class="filter-input"
+            />
+          </div>
+
+          <div class="filter-group">
+            <label class="filter-label">Type</label>
+            <select v-model="selectedType" class="filter-select">
+              <option value="">Tous les types</option>
+              <option value="bon_livraison">Bon de livraison</option>
+              <option value="facture">Facture</option>
+              <option value="devis">Devis</option>
+              <option value="autre">Autre</option>
+            </select>
+          </div>
         </div>
       </div>
 
       <!-- Liste des documents -->
-      <div class="overflow-hidden rounded-2xl border border-gray-200">
-        <div class="overflow-x-auto">
-          <table class="min-w-full divide-y divide-gray-200">
-            <thead class="bg-gradient-to-r from-gray-50 to-gray-100">
-              <tr>
-                <th class="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                  Document
-                </th>
-                <th class="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                  Type / Statut
-                </th>
-                <th class="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                  Taille
-                </th>
-                <th class="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                  Date
-                </th>
-                <th class="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                  Créateur
-                </th>
-                <th class="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                  Actions
-                </th>
-              </tr>
-            </thead>
-            <tbody class="bg-white divide-y divide-gray-200">
-              <tr v-for="document in documentsFiltres" :key="document.id" class="hover:bg-gray-50 transition-colors">
-                <td class="px-6 py-4">
-                  <div class="flex items-center">
-                    <div class="h-10 w-10 rounded-xl flex items-center justify-center mr-3" :class="{
-                      'bg-green-100': document.type === 'BL',
-                      'bg-blue-100': document.type !== 'BL'
-                    }">
-                      <TruckIcon v-if="document.type === 'BL'" class="h-5 w-5 text-green-600" />
-                      <DocumentTextIcon v-else class="h-5 w-5 text-blue-600" />
-                    </div>
-                    <div class="flex-1">
-                      <div class="text-sm font-semibold text-gray-900">{{ document.nom }}</div>
-                      <div v-if="document.client" class="text-sm text-gray-600 font-medium">Client: {{ document.client }}</div>
-                      <div v-if="document.description" class="text-xs text-gray-500 mt-1">{{ document.description }}</div>
-                    </div>
-                  </div>
-                </td>
-                <td class="px-6 py-4">
-                  <div class="space-y-1">
-                    <span class="inline-flex px-3 py-1 text-xs font-semibold rounded-full" :class="{
-                      'bg-green-100 text-green-800': document.type === 'BL',
-                      'bg-blue-100 text-blue-800': document.type === 'Facture',
-                      'bg-purple-100 text-purple-800': document.type === 'Planification',
-                      'bg-orange-100 text-orange-800': document.type === 'Certificat',
-                      'bg-gray-100 text-gray-800': !['BL', 'Facture', 'Planification', 'Certificat'].includes(document.type)
-                    }">
-                      {{ document.type }}
-                    </span>
-                    <div v-if="document.statut">
-                      <span class="inline-flex px-2 py-1 text-xs font-medium rounded-full" :class="getStatutInfo(document.statut).color">
-                        {{ getStatutInfo(document.statut).label }}
-                      </span>
-                    </div>
-                  </div>
-                </td>
-                <td class="px-6 py-4 text-sm font-medium text-gray-900">
-                  {{ document.taille }}
-                </td>
-                <td class="px-6 py-4 text-sm text-gray-900">
-                  {{ new Date(document.dateCreation).toLocaleDateString('fr-FR') }}
-                </td>
-                <td class="px-6 py-4 text-sm text-gray-900">
-                  <div class="flex items-center">
-                    <div class="h-6 w-6 rounded-full flex items-center justify-center mr-2" :class="{
-                      'bg-green-100': document.createur === 'Système',
-                      'bg-blue-100': document.createur !== 'Système'
-                    }">
-                      <span class="text-xs font-semibold" :class="{
-                        'text-green-600': document.createur === 'Système',
-                        'text-blue-600': document.createur !== 'Système'
-                      }">
-                        {{ document.createur.charAt(0) }}
-                      </span>
-                    </div>
-                    {{ document.createur }}
-                  </div>
-                </td>
-                <td class="px-6 py-4">
-                  <div class="flex items-center space-x-3">
-                    <button
-                      @click="downloadDocument(document)"
-                      class="text-indigo-600 hover:text-indigo-900 p-2 rounded-lg hover:bg-indigo-50 transition-colors"
-                      title="Télécharger"
-                    >
-                      <ArrowDownTrayIcon class="h-4 w-4" />
-                    </button>
-                    <button
-                      class="text-gray-600 hover:text-gray-900 p-2 rounded-lg hover:bg-gray-50 transition-colors"
-                      title="Voir"
-                    >
-                      <EyeIcon class="h-4 w-4" />
-                    </button>
-                    <button
-                      v-if="document.type !== 'BL'"
-                      @click="deleteDocument(document.id)"
-                      class="text-red-600 hover:text-red-900 p-2 rounded-lg hover:bg-red-50 transition-colors"
-                      title="Supprimer"
-                    >
-                      <TrashIcon class="h-4 w-4" />
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-
-    <!-- Modal upload amélioré -->
-    <div v-if="showUploadModal" class="fixed inset-0 bg-gray-900 bg-opacity-75 backdrop-blur-sm overflow-y-auto h-full w-full z-50 flex items-center justify-center p-4">
-      <div class="relative mx-auto border w-full max-w-lg shadow-2xl rounded-3xl bg-white animate-in zoom-in-95 duration-200">
-        <!-- Header modal -->
-        <div class="bg-gradient-to-r from-indigo-500 to-purple-500 p-6 rounded-t-3xl">
-          <div class="flex items-center justify-between">
-            <div class="flex items-center space-x-3">
-              <div class="h-10 w-10 rounded-xl bg-white bg-opacity-20 flex items-center justify-center">
-                <DocumentTextIcon class="h-5 w-5 text-white" />
-              </div>
-              <div>
-                <h3 class="text-xl font-bold text-white">Upload Document</h3>
-                <p class="text-indigo-100 text-sm">Ajouter un nouveau document</p>
-              </div>
+      <div class="documents-grid">
+        <div
+          v-for="document in filteredDocuments"
+          :key="document.id"
+          class="document-card"
+        >
+          <div class="document-header">
+            <div class="document-icon-wrapper">
+              <DocumentTextIcon class="document-icon" />
             </div>
-            <button
-              @click="showUploadModal = false"
-              class="text-white hover:text-indigo-200 transition-colors p-2 rounded-lg hover:bg-white hover:bg-opacity-20"
+            <div class="document-info">
+              <h3 class="document-title">{{ document.nom }}</h3>
+              <p class="document-description">{{ document.description }}</p>
+            </div>
+          </div>
+
+          <div class="document-meta">
+            <span class="document-type">{{ getTypeLabel(document.type) }}</span>
+            <span class="document-size">{{ formatSize(document.taille) }}</span>
+          </div>
+
+          <div class="document-actions">
+            <a
+              :href="document.url"
+              target="_blank"
+              class="action-button action-primary"
             >
-              <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-              </svg>
+              <EyeIcon class="h-4 w-4 mr-2" />
+              Voir
+            </a>
+
+            <a
+              :href="document.url"
+              download
+              class="action-button action-secondary"
+            >
+              <ArrowDownIcon class="h-4 w-4 mr-2" />
+              Télécharger
+            </a>
+
+            <button @click="handleDeleteDocument(document.id!)" class="action-button action-danger">
+              <TrashIcon class="h-4 w-4 mr-2" />
+              Supprimer
             </button>
           </div>
         </div>
+      </div>
 
-        <!-- Content modal -->
-        <div class="p-6">
-          <form @submit.prevent="uploadDocument" class="space-y-6">
-            <div>
-              <label class="block text-sm font-semibold text-gray-700 mb-2">Fichier</label>
-              <div class="relative">
-                <input
-                  @change="(e) => selectedFile = (e.target as HTMLInputElement).files?.[0] || null"
-                  type="file"
-                  required
-                  class="w-full rounded-xl border-2 border-gray-300 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-all duration-200 p-3"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label class="block text-sm font-semibold text-gray-700 mb-2">Type de document</label>
-              <select
-                v-model="documentType"
-                required
-                class="w-full rounded-xl border-2 border-gray-300 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-all duration-200 p-3 bg-white"
-              >
-                <option value="">Sélectionner un type</option>
-                <option v-for="type in types" :key="type" :value="type">
-                  {{ type }}
-                </option>
-              </select>
-            </div>
-
-            <div>
-              <label class="block text-sm font-semibold text-gray-700 mb-2">Description</label>
-              <textarea
-                v-model="documentDescription"
-                rows="3"
-                class="w-full rounded-xl border-2 border-gray-300 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-all duration-200 p-3 resize-none"
-                placeholder="Description optionnelle du document..."
-              ></textarea>
-            </div>
-
-            <div class="flex justify-end space-x-3 pt-4 border-t border-gray-200">
-              <button
-                type="button"
-                @click="showUploadModal = false"
-                class="px-6 py-3 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-xl transition-all duration-200 hover:shadow-md"
-              >
-                Annuler
-              </button>
-              <button
-                type="submit"
-                class="px-6 py-3 text-sm font-medium text-white bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-600 hover:to-purple-600 rounded-xl transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
-              >
-                Upload Document
-              </button>
-            </div>
-          </form>
+      <!-- État vide -->
+      <div v-if="filteredDocuments.length === 0" class="empty-state">
+        <div class="empty-icon-wrapper">
+          <DocumentTextIcon class="empty-icon" />
         </div>
+        <h3 class="empty-title">Aucun document</h3>
+        <p class="empty-subtitle">Les documents générés apparaîtront ici</p>
       </div>
     </div>
   </div>
 </template>
+
+<script setup lang="ts">
+import { ref, computed, onMounted } from 'vue'
+import { useCompleteHybridService, type CompleteDocument } from '@/services/completeHybridService'
+import {
+  DocumentTextIcon,
+  TruckIcon,
+  ArrowUpIcon,
+  EyeIcon,
+  ArrowDownIcon,
+  TrashIcon
+} from '@heroicons/vue/24/outline'
+
+const {
+  getDocuments,
+  deleteDocument
+} = useCompleteHybridService()
+
+// État réactif
+const documents = ref<CompleteDocument[]>([])
+const searchTerm = ref('')
+const selectedType = ref('')
+
+// Computed
+const bonsDeLivraison = computed(() =>
+  documents.value.filter(d => d.type === 'bon_livraison')
+)
+
+const totalSize = computed(() =>
+  documents.value.reduce((sum, doc) => sum + doc.taille, 0)
+)
+
+const filteredDocuments = computed(() => {
+  return documents.value.filter(document => {
+    const matchesSearch = document.nom.toLowerCase().includes(searchTerm.value.toLowerCase()) ||
+                         document.description?.toLowerCase().includes(searchTerm.value.toLowerCase())
+    const matchesType = !selectedType.value || document.type === selectedType.value
+    
+    return matchesSearch && matchesType
+  })
+})
+
+// Méthodes
+const loadDocuments = async () => {
+  try {
+    console.log('🔍 [DocumentsView] Chargement des documents...')
+    documents.value = await getDocuments()
+    console.log('✅ [DocumentsView] Documents chargés:', documents.value.length)
+  } catch (error) {
+    console.error('❌ [DocumentsView] Erreur lors du chargement des documents:', error)
+  }
+}
+
+const handleDeleteDocument = async (id: string) => {
+  if (confirm('Êtes-vous sûr de vouloir supprimer ce document ?')) {
+    try {
+      console.log('🗑️ [DocumentsView] Suppression du document:', id)
+      await deleteDocument(id)
+      await loadDocuments()
+      console.log('✅ [DocumentsView] Document supprimé')
+    } catch (error) {
+      console.error('❌ [DocumentsView] Erreur lors de la suppression:', error)
+    }
+  }
+}
+
+const getTypeLabel = (type: string) => {
+  const labels: Record<string, string> = {
+    'bon_livraison': 'Bon de livraison',
+    'facture': 'Facture',
+    'devis': 'Devis',
+    'autre': 'Autre'
+  }
+  return labels[type] || type
+}
+
+const formatSize = (bytes: number) => {
+  if (bytes === 0) return '0 B'
+  const k = 1024
+  const sizes = ['B', 'KB', 'MB', 'GB']
+  const i = Math.floor(Math.log(bytes) / Math.log(k))
+  return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i]
+}
+
+// Lifecycle
+onMounted(() => {
+  loadDocuments()
+})
+</script>
+
+<style scoped>
+/* Container principal */
+.documents-container {
+  min-height: 100vh;
+  background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+  padding: 2rem;
+}
+
+/* Header moderne */
+.documents-header {
+  margin-bottom: 2rem;
+}
+
+.header-content {
+  background: white;
+  border-radius: 1rem;
+  padding: 2rem;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+}
+
+.header-main {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.page-title {
+  font-size: 2rem;
+  font-weight: 700;
+  color: #1e293b;
+  margin: 0;
+}
+
+.page-subtitle {
+  color: #64748b;
+  font-size: 1rem;
+  margin: 0.5rem 0 0 0;
+}
+
+/* Contenu principal */
+.main-content {
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+/* Grille des statistiques */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1.5rem;
+  margin-bottom: 2rem;
+}
+
+.stat-card {
+  background: white;
+  border-radius: 1rem;
+  padding: 1.5rem;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.stat-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 25px -3px rgba(0, 0, 0, 0.1);
+}
+
+.stat-content {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.stat-icon-wrapper {
+  width: 3rem;
+  height: 3rem;
+  border-radius: 0.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.stat-blue {
+  background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+}
+
+.stat-green {
+  background: linear-gradient(135deg, #10b981, #059669);
+}
+
+.stat-purple {
+  background: linear-gradient(135deg, #8b5cf6, #7c3aed);
+}
+
+.stat-icon {
+  width: 1.5rem;
+  height: 1.5rem;
+  color: white;
+}
+
+.stat-details {
+  flex: 1;
+}
+
+.stat-label {
+  font-size: 0.875rem;
+  color: #64748b;
+  margin: 0;
+}
+
+.stat-value {
+  font-size: 2rem;
+  font-weight: 700;
+  color: #1e293b;
+  margin: 0.25rem 0 0 0;
+}
+
+.stat-unit {
+  font-size: 0.75rem;
+  color: #94a3b8;
+  margin: 0;
+}
+
+/* Section des filtres */
+.filters-section {
+  background: white;
+  border-radius: 1rem;
+  padding: 1.5rem;
+  margin-bottom: 2rem;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+}
+
+.filters-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 1rem;
+}
+
+.filter-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.filter-label {
+  font-weight: 600;
+  color: #374151;
+  font-size: 0.875rem;
+}
+
+.filter-input,
+.filter-select {
+  padding: 0.75rem;
+  border: 2px solid #e2e8f0;
+  border-radius: 0.5rem;
+  font-size: 0.875rem;
+  transition: border-color 0.2s;
+}
+
+.filter-input:focus,
+.filter-select:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+/* Grille des documents */
+.documents-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
+  gap: 1.5rem;
+}
+
+.document-card {
+  background: white;
+  border-radius: 1rem;
+  padding: 1.5rem;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+  transition: transform 0.2s, box-shadow 0.2s;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.document-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 25px -3px rgba(0, 0, 0, 0.1);
+}
+
+.document-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+}
+
+.document-icon-wrapper {
+  width: 3rem;
+  height: 3rem;
+  background: linear-gradient(135deg, #f1f5f9, #e2e8f0);
+  border-radius: 0.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.document-icon {
+  width: 1.5rem;
+  height: 1.5rem;
+  color: #64748b;
+}
+
+.document-info {
+  flex: 1;
+}
+
+.document-title {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: #1e293b;
+  margin: 0 0 0.5rem 0;
+}
+
+.document-description {
+  color: #64748b;
+  font-size: 0.875rem;
+  margin: 0;
+}
+
+.document-meta {
+  display: flex;
+  gap: 1rem;
+  font-size: 0.75rem;
+  color: #64748b;
+}
+
+.document-type {
+  padding: 0.25rem 0.75rem;
+  background: #f1f5f9;
+  border-radius: 9999px;
+  font-weight: 500;
+}
+
+.document-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.action-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  border-radius: 0.5rem;
+  font-weight: 500;
+  text-decoration: none;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-size: 0.875rem;
+}
+
+.action-primary {
+  background: #3b82f6;
+  color: white;
+}
+
+.action-primary:hover {
+  background: #2563eb;
+  transform: translateY(-1px);
+}
+
+.action-secondary {
+  background: #64748b;
+  color: white;
+}
+
+.action-secondary:hover {
+  background: #475569;
+  transform: translateY(-1px);
+}
+
+.action-danger {
+  background: #ef4444;
+  color: white;
+}
+
+.action-danger:hover {
+  background: #dc2626;
+  transform: translateY(-1px);
+}
+
+/* État vide */
+.empty-state {
+  text-align: center;
+  padding: 4rem 2rem;
+  background: white;
+  border-radius: 1rem;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+}
+
+.empty-icon-wrapper {
+  width: 4rem;
+  height: 4rem;
+  background: linear-gradient(135deg, #f1f5f9, #e2e8f0);
+  border-radius: 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 1rem;
+}
+
+.empty-icon {
+  width: 2rem;
+  height: 2rem;
+  color: #94a3b8;
+}
+
+.empty-title {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #1e293b;
+  margin: 0 0 0.5rem 0;
+}
+
+.empty-subtitle {
+  color: #64748b;
+  font-size: 0.875rem;
+  margin: 0;
+}
+</style>

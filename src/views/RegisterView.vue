@@ -1,268 +1,310 @@
-<script setup lang="ts">
-import { ref, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
-import { useAuth } from '../services/auth'
-import { useLogo } from '../composables/useLogo'
-
-const router = useRouter()
-const { signUp, signInWithGoogle, isLoading, initAuth } = useAuth()
-const { logo, getLogoAlt, getLogoClass } = useLogo()
-
-const email = ref('')
-const password = ref('')
-const confirmPassword = ref('')
-const firstName = ref('')
-const lastName = ref('')
-const role = ref('secretaire')
-const error = ref('')
-const isSubmitting = ref(false)
-const success = ref('')
-
-const availableRoles = [
-  { value: 'secretaire', label: 'Secrétaire', description: 'Gestion des commandes et livraisons' },
-  { value: 'livreur', label: 'Livreur', description: 'Gestion des livraisons uniquement' }
-]
-
-// Initialiser l'authentification au montage
-onMounted(async () => {
-  await initAuth()
-})
-
-const handleRegister = async () => {
-  // Validation
-  if (!email.value || !password.value || !firstName.value || !lastName.value) {
-    error.value = 'Veuillez remplir tous les champs'
-    return
-  }
-
-  if (password.value !== confirmPassword.value) {
-    error.value = 'Les mots de passe ne correspondent pas'
-    return
-  }
-
-  if (password.value.length < 6) {
-    error.value = 'Le mot de passe doit contenir au moins 6 caractères'
-    return
-  }
-
-  isSubmitting.value = true
-  error.value = ''
-  success.value = ''
-
-  try {
-    await signUp(email.value, password.value, {
-      first_name: firstName.value,
-      last_name: lastName.value,
-        role: role.value as any
-    })
-    
-    success.value = 'Compte créé avec succès ! Vérifiez votre email pour confirmer votre compte.'
-    
-    // Redirection après 3 secondes
-    setTimeout(() => {
-      router.push('/login')
-    }, 3000)
-  } catch (err: any) {
-    error.value = err.message || 'Erreur lors de la création du compte'
-  } finally {
-    isSubmitting.value = false
-  }
-}
-
-const handleGoogleLogin = async () => {
-  try {
-    await signInWithGoogle()
-  } catch (err: any) {
-    error.value = err.message || 'Erreur lors de la connexion Google'
-  }
-}
-</script>
-
 <template>
   <div class="min-h-screen bg-gray-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
     <div class="sm:mx-auto sm:w-full sm:max-w-md">
-      <div class="flex justify-center">
-        <img :src="logo" :alt="getLogoAlt()" :class="getLogoClass('medium')">
+      <div class="text-center">
+        <h2 class="text-3xl font-bold text-gray-900">Créer un compte</h2>
+        <p class="mt-2 text-sm text-gray-600">
+          Rejoignez Global Star Distribution
+        </p>
       </div>
-      <h2 class="mt-6 text-center text-3xl font-bold tracking-tight text-gray-900">
-        Créer un compte
-      </h2>
-      <p class="mt-2 text-center text-sm text-gray-600">
-        Rejoignez Global Star Distribution
-      </p>
     </div>
 
     <div class="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
-      <div class="bg-white py-8 px-4 shadow-xl rounded-2xl sm:px-10">
+      <div class="bg-white py-8 px-4 shadow sm:rounded-lg sm:px-10">
         <form @submit.prevent="handleRegister" class="space-y-6">
-          <div class="grid grid-cols-2 gap-4">
-            <div>
-              <label for="firstName" class="block text-sm font-medium text-gray-700">
-                Prénom
-              </label>
-              <div class="mt-1">
+          <!-- Informations personnelles -->
+          <div class="space-y-4">
+            <h3 class="text-lg font-medium text-gray-900">Informations personnelles</h3>
+            
+            <div class="grid grid-cols-2 gap-4">
+              <div>
+                <label for="firstName" class="block text-sm font-medium text-gray-700">
+                  Prénom *
+                </label>
                 <input
                   id="firstName"
-                  v-model="firstName"
-                  name="firstName"
+                  v-model="form.firstName"
                   type="text"
                   required
-                  class="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-lg placeholder-gray-400 focus:outline-none focus:ring-orange-500 focus:border-orange-500"
+                  class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                   placeholder="Votre prénom"
                 />
               </div>
-            </div>
-
-            <div>
-              <label for="lastName" class="block text-sm font-medium text-gray-700">
-                Nom
-              </label>
-              <div class="mt-1">
+              
+              <div>
+                <label for="lastName" class="block text-sm font-medium text-gray-700">
+                  Nom *
+                </label>
                 <input
                   id="lastName"
-                  v-model="lastName"
-                  name="lastName"
+                  v-model="form.lastName"
                   type="text"
                   required
-                  class="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-lg placeholder-gray-400 focus:outline-none focus:ring-orange-500 focus:border-orange-500"
+                  class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                   placeholder="Votre nom"
                 />
               </div>
             </div>
           </div>
 
-          <div>
-            <label for="email" class="block text-sm font-medium text-gray-700">
-              Adresse email
-            </label>
-            <div class="mt-1">
+          <!-- Informations de connexion -->
+          <div class="space-y-4">
+            <h3 class="text-lg font-medium text-gray-900">Informations de connexion</h3>
+            
+            <div>
+              <label for="email" class="block text-sm font-medium text-gray-700">
+                Adresse email *
+              </label>
               <input
                 id="email"
-                v-model="email"
-                name="email"
+                v-model="form.email"
                 type="email"
                 required
-                class="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-lg placeholder-gray-400 focus:outline-none focus:ring-orange-500 focus:border-orange-500"
+                class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                 placeholder="votre@email.com"
               />
             </div>
-          </div>
 
-          <div>
-            <label for="password" class="block text-sm font-medium text-gray-700">
-              Mot de passe
-            </label>
-            <div class="mt-1">
+            <div>
+              <label for="password" class="block text-sm font-medium text-gray-700">
+                Mot de passe *
+              </label>
               <input
                 id="password"
-                v-model="password"
-                name="password"
+                v-model="form.password"
                 type="password"
                 required
-                class="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-lg placeholder-gray-400 focus:outline-none focus:ring-orange-500 focus:border-orange-500"
+                minlength="6"
+                class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                 placeholder="Minimum 6 caractères"
               />
+              <p class="mt-1 text-xs text-gray-500">
+                Le mot de passe doit contenir au moins 6 caractères
+              </p>
             </div>
-          </div>
 
-          <div>
-            <label for="confirmPassword" class="block text-sm font-medium text-gray-700">
-              Confirmer le mot de passe
-            </label>
-            <div class="mt-1">
+            <div>
+              <label for="confirmPassword" class="block text-sm font-medium text-gray-700">
+                Confirmer le mot de passe *
+              </label>
               <input
                 id="confirmPassword"
-                v-model="confirmPassword"
-                name="confirmPassword"
+                v-model="form.confirmPassword"
                 type="password"
                 required
-                class="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-lg placeholder-gray-400 focus:outline-none focus:ring-orange-500 focus:border-orange-500"
+                class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                 placeholder="Répétez votre mot de passe"
               />
             </div>
           </div>
 
-          <div>
-            <label for="role" class="block text-sm font-medium text-gray-700">
-              Rôle
-            </label>
-            <div class="mt-1">
+          <!-- Rôle utilisateur -->
+          <div class="space-y-4">
+            <h3 class="text-lg font-medium text-gray-900">Rôle dans l'entreprise</h3>
+            
+            <div>
+              <label for="role" class="block text-sm font-medium text-gray-700">
+                Votre rôle *
+              </label>
               <select
                 id="role"
-                v-model="role"
-                name="role"
+                v-model="form.role"
                 required
-                class="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-orange-500 focus:border-orange-500"
+                class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
               >
-                <option v-for="roleOption in availableRoles" :key="roleOption.value" :value="roleOption.value">
-                  {{ roleOption.label }} - {{ roleOption.description }}
-                </option>
+                <option value="">Sélectionnez votre rôle</option>
+                <option value="secretaire">Secrétaire</option>
+                <option value="livreur">Livreur</option>
+                <option value="operator">Opérateur</option>
+                <option value="manager">Manager</option>
+                <option value="admin">Administrateur</option>
               </select>
+              <p class="mt-1 text-xs text-gray-500">
+                Choisissez le rôle qui correspond le mieux à vos responsabilités
+              </p>
             </div>
           </div>
 
-          <div v-if="error" class="bg-red-50 border border-red-200 rounded-lg p-3">
-            <p class="text-sm text-red-600">{{ error }}</p>
+          <!-- Informations de contact -->
+          <div class="space-y-4">
+            <h3 class="text-lg font-medium text-gray-900">Informations de contact (optionnel)</h3>
+            
+            <div>
+              <label for="phone" class="block text-sm font-medium text-gray-700">
+                Téléphone
+              </label>
+              <input
+                id="phone"
+                v-model="form.phone"
+                type="tel"
+                class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                placeholder="+33 6 12 34 56 78"
+              />
+            </div>
+
           </div>
 
-          <div v-if="success" class="bg-green-50 border border-green-200 rounded-lg p-3">
-            <p class="text-sm text-green-600">{{ success }}</p>
+          <!-- Conditions d'utilisation -->
+          <div class="flex items-start">
+            <div class="flex items-center h-5">
+              <input
+                id="terms"
+                v-model="form.acceptTerms"
+                type="checkbox"
+                required
+                class="focus:ring-blue-500 h-4 w-4 text-blue-600 border-gray-300 rounded"
+              />
+            </div>
+            <div class="ml-3 text-sm">
+              <label for="terms" class="font-medium text-gray-700">
+                J'accepte les conditions d'utilisation *
+              </label>
+              <p class="text-gray-500">
+                En créant un compte, vous acceptez nos conditions d'utilisation et notre politique de confidentialité.
+              </p>
+            </div>
           </div>
 
+          <!-- Messages d'erreur -->
+          <div v-if="error" class="bg-red-50 border border-red-200 rounded-md p-4">
+            <div class="flex">
+              <div class="flex-shrink-0">
+                <svg class="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
+                  <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
+                </svg>
+              </div>
+              <div class="ml-3">
+                <h3 class="text-sm font-medium text-red-800">
+                  Erreur d'inscription
+                </h3>
+                <div class="mt-2 text-sm text-red-700">
+                  {{ error }}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Message de succès -->
+          <div v-if="success" class="bg-green-50 border border-green-200 rounded-md p-4">
+            <div class="flex">
+              <div class="flex-shrink-0">
+                <svg class="h-5 w-5 text-green-400" viewBox="0 0 20 20" fill="currentColor">
+                  <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+                </svg>
+              </div>
+              <div class="ml-3">
+                <h3 class="text-sm font-medium text-green-800">
+                  Inscription réussie !
+                </h3>
+                <div class="mt-2 text-sm text-green-700">
+                  Votre compte a été créé avec succès. Vous pouvez maintenant vous connecter.
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Bouton d'inscription -->
           <div>
             <button
               type="submit"
-              :disabled="isSubmitting || isLoading"
-              class="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-lg text-white bg-orange-500 hover:bg-orange-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              :disabled="loading || !isFormValid"
+              class="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <span v-if="isSubmitting" class="absolute left-0 inset-y-0 flex items-center pl-3">
-                <svg class="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                  <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
-              </span>
-              {{ isSubmitting ? 'Création...' : 'Créer mon compte' }}
+              {{ loading ? 'Création du compte...' : 'Créer mon compte' }}
             </button>
           </div>
 
-          <div class="mt-4">
-            <button
-              type="button"
-              @click="handleGoogleLogin"
-              :disabled="isSubmitting || isLoading"
-              class="w-full flex justify-center items-center py-2 px-4 border border-gray-300 rounded-lg shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            >
-              <svg class="w-5 h-5 mr-2" viewBox="0 0 24 24">
-                <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-                <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-                <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
-                <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
-              </svg>
-              S'inscrire avec Google
-            </button>
+          <!-- Lien vers la connexion -->
+          <div class="text-center">
+            <p class="text-sm text-gray-600">
+              Déjà un compte ?
+              <router-link to="/login" class="font-medium text-blue-600 hover:text-blue-500">
+                Se connecter
+              </router-link>
+            </p>
           </div>
         </form>
-
-        <div class="mt-6">
-          <div class="relative">
-            <div class="absolute inset-0 flex items-center">
-              <div class="w-full border-t border-gray-300" />
-            </div>
-            <div class="relative flex justify-center text-sm">
-              <span class="px-2 bg-white text-gray-500">Déjà un compte ?</span>
-            </div>
-          </div>
-
-          <div class="mt-6 text-center">
-            <router-link
-              to="/login"
-              class="text-orange-600 hover:text-orange-500 text-sm font-medium"
-            >
-              Se connecter
-            </router-link>
-          </div>
-        </div>
       </div>
     </div>
   </div>
 </template>
+
+<script setup lang="ts">
+import { ref, computed } from 'vue'
+import { useRouter } from 'vue-router'
+import { useAuth } from '../services/auth'
+
+const router = useRouter()
+const { signUp } = useAuth()
+
+const loading = ref(false)
+const error = ref('')
+const success = ref(false)
+
+const form = ref({
+  firstName: '',
+  lastName: '',
+  email: '',
+  password: '',
+  confirmPassword: '',
+  role: '',
+  phone: '',
+  acceptTerms: false
+})
+
+// Validation du formulaire
+const isFormValid = computed(() => {
+  return form.value.firstName &&
+         form.value.lastName &&
+         form.value.email &&
+         form.value.password &&
+         form.value.password === form.value.confirmPassword &&
+         form.value.role &&
+         form.value.acceptTerms
+})
+
+// Gestion de l'inscription
+const handleRegister = async () => {
+  if (!isFormValid.value) {
+    error.value = 'Veuillez remplir tous les champs obligatoires'
+    return
+  }
+
+  if (form.value.password !== form.value.confirmPassword) {
+    error.value = 'Les mots de passe ne correspondent pas'
+    return
+  }
+
+  loading.value = true
+  error.value = ''
+  success.value = false
+
+  try {
+    console.log('🔐 [RegisterView] Inscription - Début')
+    console.log('📧 [RegisterView] Email:', form.value.email)
+    console.log('👤 [RegisterView] Rôle:', form.value.role)
+
+    // Inscription avec métadonnées étendues
+    await signUp(form.value.email, form.value.password, {
+      first_name: form.value.firstName,
+      last_name: form.value.lastName,
+      role: form.value.role as any,
+      phone: form.value.phone
+    })
+
+    console.log('✅ [RegisterView] Inscription réussie')
+    success.value = true
+    
+    // Redirection vers la connexion après 2 secondes
+    setTimeout(() => {
+      router.push('/login')
+    }, 2000)
+
+  } catch (err: any) {
+    console.error('❌ [RegisterView] Erreur d\'inscription:', err)
+    error.value = err.message || 'Erreur lors de la création du compte'
+  } finally {
+    loading.value = false
+  }
+}
+</script>

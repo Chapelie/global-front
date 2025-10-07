@@ -1,5 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import { storageService } from '../services/storage'
+import { useAuth } from '../services/auth'
 import HomeView from '../views/HomeView.vue'
 
 const router = createRouter({
@@ -24,6 +24,12 @@ const router = createRouter({
       meta: { requiresAuth: true }
     },
     {
+      path: '/dashboard',
+      name: 'dashboard',
+      component: () => import('../views/DashboardView.vue'),
+      meta: { requiresAuth: true }
+    },
+    {
       path: '/commandes',
       name: 'commandes',
       component: () => import('../views/CommandesView.vue'),
@@ -41,6 +47,7 @@ const router = createRouter({
       component: () => import('../views/LivraisonView.vue'),
       meta: { requiresAuth: true }
     },
+  
     {
       path: '/stock',
       name: 'stock',
@@ -71,22 +78,38 @@ const router = createRouter({
           component: () => import('../views/ParametresView.vue'),
           meta: { requiresAuth: true }
         },
+       
         {
-          path: '/test-supabase',
-          name: 'test-supabase',
-          component: () => import('../views/TestSupabaseView.vue'),
-          meta: { requiresAuth: true }
+          path: '/users',
+          name: 'users',
+          component: () => import('../views/UsersView.vue'),
+          meta: { requiresAuth: true, requiresAdmin: true }
         },
   ],
 })
 
-// Navigation guard pour vérifier l'authentification (ancien système localStorage)
-router.beforeEach((to, from, next) => {
-  const currentUser = storageService.getCurrentUser()
+// Navigation guard pour vérifier l'authentification Supabase
+router.beforeEach(async (to, from, next) => {
+  const { isAuthenticated, isLoading, isInitialized } = useAuth()
   
-  if (to.meta.requiresAuth && !currentUser) {
+  // Attendre que l'authentification soit initialisée
+  if (!isInitialized.value || isLoading.value) {
+    // Attendre que l'auth soit initialisée
+    await new Promise(resolve => {
+      const checkAuth = () => {
+        if (isInitialized.value && !isLoading.value) {
+          resolve(true)
+        } else {
+          setTimeout(checkAuth, 50)
+        }
+      }
+      checkAuth()
+    })
+  }
+  
+  if (to.meta.requiresAuth && !isAuthenticated.value) {
     next('/login')
-  } else if (to.path === '/login' && currentUser) {
+  } else if (to.path === '/login' && isAuthenticated.value) {
     next('/')
   } else {
     next()

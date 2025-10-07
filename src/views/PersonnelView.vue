@@ -1,460 +1,836 @@
+<template>
+  <div class="personnel-container">
+    <!-- Header moderne -->
+    <div class="personnel-header">
+      <div class="header-content">
+        <div class="header-main">
+          <div class="flex items-center">
+            <div class="h-12 w-12 rounded-2xl bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center mr-4 shadow-lg">
+              <UserGroupIcon class="h-6 w-6 text-white" />
+            </div>
+            <div>
+              <h1 class="page-title">Gestion du Personnel</h1>
+              <p class="page-subtitle">Création et gestion des utilisateurs</p>
+            </div>
+          </div>
+          <div class="flex items-center space-x-4">
+            <button
+              @click="openModal()"
+              class="action-button"
+            >
+              <PlusIcon class="h-5 w-5 mr-2" />
+              Nouvel utilisateur
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="main-content">
+      <!-- KPI Cards modernisés -->
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-content">
+            <div class="stat-icon-wrapper stat-blue">
+              <UserGroupIcon class="stat-icon" />
+            </div>
+            <div class="stat-details">
+              <dl>
+                <dt class="stat-label">Total utilisateurs</dt>
+                <dd class="stat-value">{{ users.length }}</dd>
+                <dd class="stat-unit">utilisateurs</dd>
+              </dl>
+            </div>
+          </div>
+        </div>
+
+        <div class="stat-card">
+          <div class="stat-content">
+            <div class="stat-icon-wrapper stat-green">
+              <CheckCircleIcon class="stat-icon" />
+            </div>
+            <div class="stat-details">
+              <dl>
+                <dt class="stat-label">Utilisateurs actifs</dt>
+                <dd class="stat-value">{{ activeUsers }}</dd>
+                <dd class="stat-unit">actifs</dd>
+              </dl>
+            </div>
+          </div>
+        </div>
+
+        <div class="stat-card">
+          <div class="stat-content">
+            <div class="stat-icon-wrapper stat-purple">
+              <ShieldCheckIcon class="stat-icon" />
+            </div>
+            <div class="stat-details">
+              <dl>
+                <dt class="stat-label">Administrateurs</dt>
+                <dd class="stat-value">{{ getRoleCount('admin') }}</dd>
+                <dd class="stat-unit">admins</dd>
+              </dl>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Liste des utilisateurs -->
+      <div class="users-grid">
+        <div
+          v-for="user in users"
+          :key="user.id"
+          class="user-card"
+        >
+          <div class="user-header">
+            <div class="user-avatar">
+              <div class="avatar-circle">
+                {{ user.first_name.charAt(0) }}{{ user.last_name.charAt(0) }}
+              </div>
+            </div>
+            <div class="user-info">
+              <h3 class="user-name">{{ user.first_name }} {{ user.last_name }}</h3>
+              <p class="user-email">{{ user.email }}</p>
+            </div>
+          </div>
+
+          <div class="user-meta">
+            <span :class="`role-badge role-${user.role}`">
+              {{ getRoleLabel(user.role) }}
+            </span>
+            <span :class="`status-badge status-${user.actif ? 'active' : 'inactive'}`">
+              {{ user.actif ? 'Actif' : 'Inactif' }}
+            </span>
+          </div>
+
+          <div v-if="user.phone" class="user-phone">
+            <PhoneIcon class="phone-icon" />
+            {{ user.phone }}
+          </div>
+
+          <div class="user-actions">
+            <button @click="openModal(user)" class="action-button action-secondary">
+              <PencilIcon class="h-4 w-4 mr-2" />
+              Modifier
+            </button>
+
+            <button @click="handleDeleteUser(user.id!)" class="action-button action-danger">
+              <TrashIcon class="h-4 w-4 mr-2" />
+              Supprimer
+            </button>
+          </div>
+        </div>
+      </div>
+      </div>
+
+      <!-- Modal -->
+    <div v-if="showModal" class="modal-overlay" @click="closeModal">
+      <div class="modal-content" @click.stop>
+        <div class="modal-header">
+          <h2 class="modal-title">{{ editingUser ? 'Modifier l\'utilisateur' : 'Nouvel utilisateur' }}</h2>
+          <button @click="closeModal" class="modal-close">
+            <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        <form @submit.prevent="saveUser" class="modal-form">
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Prénom *</label>
+              <input
+                v-model="newUser.first_name"
+                type="text"
+                required
+                class="form-input"
+                placeholder="Prénom"
+              />
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Nom *</label>
+              <input
+                v-model="newUser.last_name"
+                type="text"
+                required
+                class="form-input"
+                placeholder="Nom"
+              />
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Email *</label>
+            <input
+              v-model="newUser.email"
+              type="email"
+              required
+              class="form-input"
+              placeholder="email@exemple.com"
+            />
+          </div>
+
+          <div v-if="!editingUser" class="form-group">
+            <label class="form-label">Mot de passe *</label>
+            <input
+              v-model="newUser.password"
+              type="password"
+              required
+              class="form-input"
+              placeholder="Mot de passe"
+            />
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Rôle *</label>
+              <select v-model="newUser.role" required class="form-select">
+                <option value="operator">Opérateur</option>
+                <option value="manager">Manager</option>
+                <option value="admin">Administrateur</option>
+                <option value="secretaire">Secrétaire</option>
+                <option value="livreur">Livreur</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Téléphone</label>
+              <input
+                v-model="newUser.phone"
+                type="tel"
+                class="form-input"
+                placeholder="+33 6 12 34 56 78"
+              />
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Statut</label>
+            <div class="checkbox-group">
+              <label class="checkbox-label">
+                <input
+                  v-model="newUser.actif"
+                  type="checkbox"
+                  class="checkbox-input"
+                />
+                <span class="checkbox-text">Utilisateur actif</span>
+              </label>
+            </div>
+          </div>
+
+          <div class="modal-actions">
+            <button type="button" @click="closeModal" class="btn btn-secondary">
+              Annuler
+            </button>
+            <button type="submit" class="btn btn-primary">
+              {{ editingUser ? 'Mettre à jour' : 'Créer' }}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Modal de connexion automatique -->
+    <AutoLoginModal
+      v-if="showAutoLoginModal && createdUser"
+      :show="showAutoLoginModal"
+      :user="createdUser"
+      @close="closeAutoLoginModal"
+      @success="onAutoLoginSuccess"
+    />
+  </div>
+</template>
+
 <script setup lang="ts">
-import { ref } from 'vue'
-import { 
-  PlusIcon, 
-  PencilIcon, 
-  TrashIcon,
-  UsersIcon,
-  ClockIcon,
+import { ref, computed, onMounted } from 'vue'
+import { useCompleteHybridService, type CompleteUser } from '@/services/completeHybridService'
+import AutoLoginModal from '@/components/AutoLoginModal.vue'
+import {
+  UserGroupIcon,
+  PlusIcon,
   CheckCircleIcon,
-  UserIcon
+  ShieldCheckIcon,
+  PhoneIcon,
+  PencilIcon,
+  TrashIcon
 } from '@heroicons/vue/24/outline'
 
-interface Employe {
-  id: number
-  nom: string
-  prenom: string
-  poste: string
-  telephone: string
-  email: string
-  dateEmbauche: string
-  statut: 'actif' | 'inactif'
-  taches: Array<{
-    id: number
-    description: string
-    statut: 'en_cours' | 'termine' | 'en_attente'
-    date: string
-  }>
-}
+const {
+  getUsers,
+  createUser,
+  updateUser,
+  deleteUser
+} = useCompleteHybridService()
 
-const employes = ref<Employe[]>([
-  {
-    id: 1,
-    nom: 'Dupont',
-    prenom: 'Jean',
-    poste: 'Ouvrier production',
-    telephone: '+33 6 12 34 56 78',
-    email: 'jean.dupont@briqueapp.com',
-    dateEmbauche: '2023-01-15',
-    statut: 'actif',
-    taches: [
-      { id: 1, description: 'Production briques standard', statut: 'termine', date: '2024-01-15' },
-      { id: 2, description: 'Contrôle qualité', statut: 'en_cours', date: '2024-01-16' }
-    ]
-  },
-  {
-    id: 2,
-    nom: 'Martin',
-    prenom: 'Marie',
-    poste: 'Chauffeur livraison',
-    telephone: '+33 6 98 76 54 32',
-    email: 'marie.martin@briqueapp.com',
-    dateEmbauche: '2023-03-20',
-    statut: 'actif',
-    taches: [
-      { id: 3, description: 'Livraison client Dubois', statut: 'en_cours', date: '2024-01-16' }
-    ]
-  }
-])
-
+// État réactif
+const users = ref<CompleteUser[]>([])
 const showModal = ref(false)
-const editingEmploye = ref<Employe | null>(null)
+const showAutoLoginModal = ref(false)
+const editingUser = ref<CompleteUser | null>(null)
+const createdUser = ref<CompleteUser | null>(null)
 
-const newEmploye = ref({
-  nom: '',
-  prenom: '',
-  poste: '',
-  telephone: '',
+const newUser = ref<Omit<CompleteUser, 'id' | 'created_at' | 'updated_at'> & { password: string }>({
   email: '',
-  dateEmbauche: '',
-  statut: 'actif' as const
+  first_name: '',
+  last_name: '',
+  role: 'operator',
+  phone: '',
+  actif: true,
+  password: ''
 })
 
-const postes = [
-  'Ouvrier production',
-  'Chauffeur livraison',
-  'Manager production',
-  'Contrôleur qualité',
-  'Magasinier',
-  'Administratif'
-]
+// Computed
+const activeUsers = computed(() => 
+  users.value.filter(u => u.actif).length
+)
 
-const openModal = (employe?: Employe) => {
-  if (employe) {
-    editingEmploye.value = employe
-    newEmploye.value = { 
-      ...employe,
-      statut: employe.statut === 'inactif' ? 'actif' : employe.statut // Convertir inactif en actif pour le formulaire
+// Méthodes
+const loadUsers = async () => {
+  try {
+    console.log('🔍 [PersonnelView] Chargement des utilisateurs...')
+    users.value = await getUsers()
+    console.log('✅ [PersonnelView] Utilisateurs chargés:', users.value.length)
+  } catch (error) {
+    console.error('❌ [PersonnelView] Erreur lors du chargement des utilisateurs:', error)
+  }
+}
+
+const openModal = (user?: CompleteUser) => {
+  if (user) {
+    editingUser.value = user
+    newUser.value = {
+      email: user.email,
+      first_name: user.first_name,
+      last_name: user.last_name,
+      role: user.role,
+      phone: user.phone || '',
+      actif: user.actif,
+      password: ''
     }
   } else {
-    editingEmploye.value = null
-    newEmploye.value = {
-      nom: '',
-      prenom: '',
-      poste: '',
-      telephone: '',
+    editingUser.value = null
+    newUser.value = {
       email: '',
-      dateEmbauche: '',
-      statut: 'actif'
+      first_name: '',
+      last_name: '',
+      role: 'operator',
+      phone: '',
+      actif: true,
+      password: ''
     }
   }
   showModal.value = true
 }
 
-const saveEmploye = () => {
-  if (editingEmploye.value) {
-    const index = employes.value.findIndex(e => e.id === editingEmploye.value!.id)
-    employes.value[index] = { ...newEmploye.value, id: editingEmploye.value.id, taches: editingEmploye.value.taches }
-  } else {
-    const newId = Math.max(...employes.value.map(e => e.id)) + 1
-    employes.value.push({ ...newEmploye.value, id: newId, taches: [] })
-  }
+const closeModal = () => {
   showModal.value = false
-  editingEmploye.value = null
+  editingUser.value = null
 }
 
-const deleteEmploye = (id: number) => {
-  if (confirm('Êtes-vous sûr de vouloir supprimer cet employé ?')) {
-    employes.value = employes.value.filter(e => e.id !== id)
+const saveUser = async () => {
+  try {
+    console.log('💾 [PersonnelView] Sauvegarde de l\'utilisateur...')
+    
+    if (editingUser.value) {
+      await updateUser(editingUser.value.id!, newUser.value)
+      console.log('✅ [PersonnelView] Utilisateur mis à jour')
+      await loadUsers()
+      closeModal()
+      alert('Utilisateur mis à jour avec succès !')
+    } else {
+      const createdUserData = await createUser(newUser.value)
+      console.log('✅ [PersonnelView] Utilisateur créé')
+      createdUser.value = createdUserData
+      await loadUsers()
+      closeModal()
+      
+      // Proposer la connexion automatique pour les nouveaux utilisateurs
+      showAutoLoginModal.value = true
+    }
+  } catch (error) {
+    console.error('❌ [PersonnelView] Erreur lors de la sauvegarde:', error)
+    alert('Erreur lors de la sauvegarde de l\'utilisateur')
   }
 }
 
-const totalEmployes = employes.value.length
-const employesActifs = employes.value.filter(e => e.statut === 'actif').length
-const totalTaches = employes.value.reduce((sum, e) => sum + e.taches.length, 0)
+const handleDeleteUser = async (id: string) => {
+  if (confirm('Êtes-vous sûr de vouloir supprimer cet utilisateur ?')) {
+    try {
+      console.log('🗑️ [PersonnelView] Suppression de l\'utilisateur:', id)
+      await deleteUser(id)
+      await loadUsers()
+      console.log('✅ [PersonnelView] Utilisateur supprimé')
+    } catch (error) {
+      console.error('❌ [PersonnelView] Erreur lors de la suppression:', error)
+      alert('Erreur lors de la suppression de l\'utilisateur')
+    }
+  }
+}
+
+const getRoleLabel = (role: string) => {
+  const labels: Record<string, string> = {
+    'superadmin': 'Super Admin',
+    'admin': 'Administrateur',
+    'manager': 'Manager',
+    'operator': 'Opérateur',
+    'secretaire': 'Secrétaire',
+    'livreur': 'Livreur'
+  }
+  return labels[role] || role
+}
+
+const getRoleCount = (role: string) => {
+  return users.value.filter(u => u.role === role).length
+}
+
+const closeAutoLoginModal = () => {
+  showAutoLoginModal.value = false
+  createdUser.value = null
+}
+
+const onAutoLoginSuccess = () => {
+  console.log('✅ [PersonnelView] Connexion automatique réussie')
+  closeAutoLoginModal()
+  alert('Connexion automatique réussie !')
+}
+
+// Lifecycle
+onMounted(() => {
+  loadUsers()
+})
 </script>
 
-<template>
-  <div class="space-y-8">
-    <!-- En-tête amélioré -->
-    <div class="bg-gradient-to-r from-purple-50 to-indigo-50 rounded-3xl p-8 border border-purple-100">
-      <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between">
-        <div class="mb-6 lg:mb-0">
-          <div class="flex items-center mb-3">
-            <div class="h-12 w-12 rounded-2xl bg-gradient-to-br from-purple-500 to-indigo-500 flex items-center justify-center mr-4">
-              <UsersIcon class="h-6 w-6 text-white" />
-            </div>
-            <div>
-              <h1 class="text-3xl font-bold text-gray-900">Gestion du Personnel</h1>
-              <p class="text-gray-600 font-medium">Suivi des employés et gestion des tâches</p>
-            </div>
-          </div>
-          <div class="flex items-center space-x-6 text-sm">
-            <div class="flex items-center text-gray-600">
-              <ClockIcon class="h-4 w-4 mr-1" />
-              <span>{{ new Date().toLocaleDateString('fr-FR') }}</span>
-            </div>
-            <div class="flex items-center text-gray-600">
-              <CheckCircleIcon class="h-4 w-4 mr-1" />
-              <span>{{ employesActifs }} employé(s) actif(s)</span>
-            </div>
-          </div>
-        </div>
-        <button
-          @click="openModal()"
-          class="inline-flex items-center px-6 py-3 bg-gradient-to-r from-purple-500 to-indigo-500 hover:from-purple-600 hover:to-indigo-600 text-white font-semibold rounded-2xl transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
-        >
-          <PlusIcon class="h-5 w-5 mr-2" />
-          Nouvel employé
-        </button>
-      </div>
-    </div>
+<style scoped>
+/* Container principal */
+.personnel-container {
+  min-height: 100vh;
+  background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+  padding: 2rem;
+}
 
-    <!-- Statistiques améliorées -->
-    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-      <div class="bg-white rounded-3xl shadow-lg hover:shadow-xl transition-all duration-300 p-6 border border-gray-100 group hover:border-blue-200">
-        <div class="flex items-center justify-between">
-          <div>
-            <div class="h-14 w-14 rounded-2xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform duration-200">
-              <UsersIcon class="h-7 w-7 text-white" />
-            </div>
-            <p class="text-sm font-semibold text-gray-600 uppercase tracking-wide">Total employés</p>
-            <p class="text-3xl font-bold text-gray-900 mt-1">{{ totalEmployes }}</p>
-          </div>
-          <div class="text-right">
-            <div class="h-2 w-16 bg-blue-200 rounded-full overflow-hidden">
-              <div class="h-full bg-gradient-to-r from-blue-500 to-blue-600 rounded-full" style="width: 100%"></div>
-            </div>
-          </div>
-        </div>
-      </div>
+/* Header moderne */
+.personnel-header {
+  margin-bottom: 2rem;
+}
 
-      <div class="bg-white rounded-3xl shadow-lg hover:shadow-xl transition-all duration-300 p-6 border border-gray-100 group hover:border-green-200">
-        <div class="flex items-center justify-between">
-          <div>
-            <div class="h-14 w-14 rounded-2xl bg-gradient-to-br from-green-500 to-green-600 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform duration-200">
-              <UserIcon class="h-7 w-7 text-white" />
-            </div>
-            <p class="text-sm font-semibold text-gray-600 uppercase tracking-wide">Employés actifs</p>
-            <p class="text-3xl font-bold text-gray-900 mt-1">{{ employesActifs }}</p>
-          </div>
-          <div class="text-right">
-            <div class="h-2 w-16 bg-green-200 rounded-full overflow-hidden">
-              <div class="h-full bg-gradient-to-r from-green-500 to-green-600 rounded-full" :style="{ width: `${Math.round((employesActifs / totalEmployes) * 100)}%` }"></div>
-            </div>
-          </div>
-        </div>
-      </div>
+.header-content {
+  background: white;
+  border-radius: 1rem;
+  padding: 2rem;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+}
 
-      <div class="bg-white rounded-3xl shadow-lg hover:shadow-xl transition-all duration-300 p-6 border border-gray-100 group hover:border-orange-200">
-        <div class="flex items-center justify-between">
-          <div>
-            <div class="h-14 w-14 rounded-2xl bg-gradient-to-br from-orange-500 to-orange-600 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform duration-200">
-              <ClockIcon class="h-7 w-7 text-white" />
-            </div>
-            <p class="text-sm font-semibold text-gray-600 uppercase tracking-wide">Total tâches</p>
-            <p class="text-3xl font-bold text-gray-900 mt-1">{{ totalTaches }}</p>
-          </div>
-          <div class="text-right">
-            <div class="h-2 w-16 bg-orange-200 rounded-full overflow-hidden">
-              <div class="h-full bg-gradient-to-r from-orange-500 to-orange-600 rounded-full" style="width: 75%"></div>
-            </div>
-          </div>
-        </div>
-      </div>
+.header-main {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
 
-      <div class="bg-white rounded-3xl shadow-lg hover:shadow-xl transition-all duration-300 p-6 border border-gray-100 group hover:border-purple-200">
-        <div class="flex items-center justify-between">
-          <div>
-            <div class="h-14 w-14 rounded-2xl bg-gradient-to-br from-purple-500 to-purple-600 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform duration-200">
-              <CheckCircleIcon class="h-7 w-7 text-white" />
-            </div>
-            <p class="text-sm font-semibold text-gray-600 uppercase tracking-wide">Tâches en cours</p>
-            <p class="text-3xl font-bold text-gray-900 mt-1">{{ employes.reduce((sum, e) => sum + e.taches.filter(t => t.statut === 'en_cours').length, 0) }}</p>
-          </div>
-          <div class="text-right">
-            <div class="h-2 w-16 bg-purple-200 rounded-full overflow-hidden">
-              <div class="h-full bg-gradient-to-r from-purple-500 to-purple-600 rounded-full" style="width: 60%"></div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
+.page-title {
+  font-size: 2rem;
+  font-weight: 700;
+  color: #1e293b;
+  margin: 0;
+}
 
-    <!-- Liste des employés améliorée -->
-    <div class="bg-white rounded-3xl shadow-lg p-8 border border-gray-100">
-      <div class="mb-6">
-        <h3 class="text-xl font-bold text-gray-900 mb-2">Équipe</h3>
-        <p class="text-gray-600">{{ employes.length }} employé(s) enregistré(s)</p>
-      </div>
-      <div class="space-y-6">
-        <div
-          v-for="employe in employes"
-          :key="employe.id"
-          class="bg-gradient-to-r from-gray-50 to-white rounded-2xl shadow-md hover:shadow-lg transition-all duration-300 p-6 border border-gray-200 hover:border-purple-200 hover:-translate-y-1"
-        >
-        <div class="flex items-start justify-between mb-4">
-          <div class="flex-1">
-            <div class="flex items-center space-x-3 mb-2">
-              <h4 class="text-lg font-semibold text-gray-900">{{ employe.prenom }} {{ employe.nom }}</h4>
-              <span 
-                class="inline-flex px-2 py-1 text-xs font-medium rounded-full"
-                :class="employe.statut === 'actif' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'"
-              >
-                {{ employe.statut === 'actif' ? 'Actif' : 'Inactif' }}
-              </span>
-            </div>
-            <p class="text-sm text-gray-600">{{ employe.poste }}</p>
-          </div>
-          <div class="flex items-center space-x-2">
-            <button
-              @click="openModal(employe)"
-              class="text-orange-600 hover:text-orange-900"
-              title="Modifier"
-            >
-              <PencilIcon class="h-4 w-4" />
-            </button>
-            <button
-              @click="deleteEmploye(employe.id)"
-              class="text-red-600 hover:text-red-900"
-              title="Supprimer"
-            >
-              <TrashIcon class="h-4 w-4" />
-            </button>
-          </div>
-        </div>
+.page-subtitle {
+  color: #64748b;
+  font-size: 1rem;
+  margin: 0.5rem 0 0 0;
+}
 
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-          <div>
-            <p class="text-sm font-medium text-gray-700">Téléphone</p>
-            <p class="text-sm text-gray-900">{{ employe.telephone }}</p>
-          </div>
-          <div>
-            <p class="text-sm font-medium text-gray-700">Email</p>
-            <p class="text-sm text-gray-900">{{ employe.email }}</p>
-          </div>
-          <div>
-            <p class="text-sm font-medium text-gray-700">Date d'embauche</p>
-            <p class="text-sm text-gray-900">{{ new Date(employe.dateEmbauche).toLocaleDateString('fr-FR') }}</p>
-          </div>
-          <div>
-            <p class="text-sm font-medium text-gray-700">Tâches en cours</p>
-            <p class="text-sm text-gray-900">{{ employe.taches.filter(t => t.statut === 'en_cours').length }}</p>
-          </div>
-        </div>
+/* Contenu principal */
+.main-content {
+  max-width: 1400px;
+  margin: 0 auto;
+}
 
-        <div v-if="employe.taches.length > 0">
-          <h5 class="text-sm font-medium text-gray-700 mb-2">Tâches récentes</h5>
-          <div class="space-y-2">
-            <div 
-              v-for="tache in employe.taches.slice(0, 3)" 
-              :key="tache.id"
-              class="flex items-center justify-between p-2 bg-gray-50 rounded-lg"
-            >
-              <span class="text-sm text-gray-900">{{ tache.description }}</span>
-              <div class="flex items-center space-x-2">
-                <span 
-                  class="inline-flex px-2 py-1 text-xs font-medium rounded-full"
-                  :class="{
-                    'bg-yellow-100 text-yellow-800': tache.statut === 'en_attente',
-                    'bg-blue-100 text-blue-800': tache.statut === 'en_cours',
-                    'bg-green-100 text-green-800': tache.statut === 'termine'
-                  }"
-                >
-                  {{ tache.statut === 'en_attente' ? 'En attente' : tache.statut === 'en_cours' ? 'En cours' : 'Terminé' }}
-                </span>
-                <span class="text-xs text-gray-500">{{ new Date(tache.date).toLocaleDateString('fr-FR') }}</span>
-              </div>
-            </div>
-          </div>
-        </div>
-        </div>
-      </div>
-    </div>
+/* Grille des statistiques */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1.5rem;
+  margin-bottom: 2rem;
+}
 
-    <!-- Modal pour ajouter/éditer amélioré -->
-    <div v-if="showModal" class="fixed inset-0 bg-gray-900 bg-opacity-75 backdrop-blur-sm overflow-y-auto h-full w-full z-50 flex items-center justify-center p-4">
-      <div class="relative mx-auto border w-full max-w-2xl shadow-2xl rounded-3xl bg-white animate-in zoom-in-95 duration-200">
-        <!-- Header modal -->
-        <div class="bg-gradient-to-r from-purple-500 to-indigo-500 p-6 rounded-t-3xl">
-          <div class="flex items-center justify-between">
-            <div class="flex items-center space-x-3">
-              <div class="h-10 w-10 rounded-xl bg-white bg-opacity-20 flex items-center justify-center">
-                <UsersIcon class="h-5 w-5 text-white" />
-              </div>
-              <div>
-                <h3 class="text-xl font-bold text-white">
-                  {{ editingEmploye ? 'Modifier l\'employé' : 'Nouvel employé' }}
-                </h3>
-                <p class="text-purple-100 text-sm">Gestion des informations personnelles</p>
-              </div>
-            </div>
-            <button
-              @click="showModal = false"
-              class="text-white hover:text-purple-200 transition-colors p-2 rounded-lg hover:bg-white hover:bg-opacity-20"
-            >
-              <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          </div>
-        </div>
+.stat-card {
+  background: white;
+  border-radius: 1rem;
+  padding: 1.5rem;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+  transition: transform 0.2s, box-shadow 0.2s;
+}
 
-        <!-- Content modal -->
-        <div class="p-6">
-          
-          <form @submit.prevent="saveEmploye" class="space-y-4">
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">Prénom</label>
-                <input
-                  v-model="newEmploye.prenom"
-                  type="text"
-                  required
-                  class="w-full rounded-lg border-gray-300 focus:border-orange-500 focus:ring-orange-500"
-                />
-              </div>
+.stat-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 25px -3px rgba(0, 0, 0, 0.1);
+}
 
-              <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">Nom</label>
-                <input
-                  v-model="newEmploye.nom"
-                  type="text"
-                  required
-                  class="w-full rounded-lg border-gray-300 focus:border-orange-500 focus:ring-orange-500"
-                />
-              </div>
-            </div>
+.stat-content {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
 
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">Poste</label>
-                <select
-                  v-model="newEmploye.poste"
-                  required
-                  class="w-full rounded-lg border-gray-300 focus:border-orange-500 focus:ring-orange-500"
-                >
-                  <option value="">Sélectionner un poste</option>
-                  <option v-for="poste in postes" :key="poste" :value="poste">
-                    {{ poste }}
-                  </option>
-                </select>
-              </div>
+.stat-icon-wrapper {
+  width: 3rem;
+  height: 3rem;
+  border-radius: 0.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
 
-              <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">Statut</label>
-                <select
-                  v-model="newEmploye.statut"
-                  required
-                  class="w-full rounded-lg border-gray-300 focus:border-orange-500 focus:ring-orange-500"
-                >
-                  <option value="actif">Actif</option>
-                  <option value="inactif">Inactif</option>
-                </select>
-              </div>
-            </div>
+.stat-blue {
+  background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+}
 
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">Téléphone</label>
-                <input
-                  v-model="newEmploye.telephone"
-                  type="tel"
-                  required
-                  class="w-full rounded-lg border-gray-300 focus:border-orange-500 focus:ring-orange-500"
-                />
-              </div>
+.stat-green {
+  background: linear-gradient(135deg, #10b981, #059669);
+}
 
-              <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">Email</label>
-                <input
-                  v-model="newEmploye.email"
-                  type="email"
-                  required
-                  class="w-full rounded-lg border-gray-300 focus:border-orange-500 focus:ring-orange-500"
-                />
-              </div>
-            </div>
+.stat-purple {
+  background: linear-gradient(135deg, #8b5cf6, #7c3aed);
+}
 
-            <div>
-              <label class="block text-sm font-medium text-gray-700 mb-1">Date d'embauche</label>
-              <input
-                v-model="newEmploye.dateEmbauche"
-                type="date"
-                required
-                class="w-full rounded-lg border-gray-300 focus:border-orange-500 focus:ring-orange-500"
-              />
-            </div>
+.stat-icon {
+  width: 1.5rem;
+  height: 1.5rem;
+  color: white;
+}
 
-            <div class="flex justify-end space-x-3 pt-6 border-t border-gray-200">
-              <button
-                type="button"
-                @click="showModal = false"
-                class="px-6 py-3 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-xl transition-all duration-200 hover:shadow-md"
-              >
-                Annuler
-              </button>
-              <button
-                type="submit"
-                class="px-6 py-3 text-sm font-medium text-white bg-gradient-to-r from-purple-500 to-indigo-500 hover:from-purple-600 hover:to-indigo-600 rounded-xl transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
-              >
-                {{ editingEmploye ? 'Modifier' : 'Ajouter' }}
-              </button>
-            </div>
-          </form>
-        </div>
-      </div>
-    </div>
-  </div>
-</template>
+.stat-details {
+  flex: 1;
+}
 
+.stat-label {
+  font-size: 0.875rem;
+  color: #64748b;
+  margin: 0;
+}
+
+.stat-value {
+  font-size: 2rem;
+  font-weight: 700;
+  color: #1e293b;
+  margin: 0.25rem 0 0 0;
+}
+
+.stat-unit {
+  font-size: 0.75rem;
+  color: #94a3b8;
+  margin: 0;
+}
+
+/* Grille des utilisateurs */
+.users-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
+  gap: 1.5rem;
+}
+
+.user-card {
+  background: white;
+  border-radius: 1rem;
+  padding: 1.5rem;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+  transition: transform 0.2s, box-shadow 0.2s;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.user-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 25px -3px rgba(0, 0, 0, 0.1);
+}
+
+.user-header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.user-avatar {
+  flex-shrink: 0;
+}
+
+.avatar-circle {
+  width: 3rem;
+  height: 3rem;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #8b5cf6, #7c3aed);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-weight: 700;
+  font-size: 1rem;
+}
+
+.user-info {
+  flex: 1;
+}
+
+.user-name {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: #1e293b;
+  margin: 0 0 0.25rem 0;
+}
+
+.user-email {
+  color: #64748b;
+  font-size: 0.875rem;
+  margin: 0;
+}
+
+.user-meta {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.role-badge {
+  padding: 0.25rem 0.75rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.role-superadmin {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.role-admin {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+.role-manager {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.role-operator {
+  background: #e0e7ff;
+  color: #3730a3;
+}
+
+.role-secretaire {
+  background: #fce7f3;
+  color: #be185d;
+}
+
+.role-livreur {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.status-badge {
+  padding: 0.25rem 0.75rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.status-active {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.status-inactive {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.user-phone {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: #64748b;
+  font-size: 0.875rem;
+}
+
+.phone-icon {
+  width: 1rem;
+  height: 1rem;
+}
+
+.user-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.action-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  border-radius: 0.5rem;
+  font-weight: 500;
+  text-decoration: none;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-size: 0.875rem;
+}
+
+.action-button {
+  background: #3b82f6;
+  color: white;
+}
+
+.action-button:hover {
+  background: #2563eb;
+  transform: translateY(-1px);
+}
+
+.action-secondary {
+  background: #64748b;
+  color: white;
+}
+
+.action-secondary:hover {
+  background: #475569;
+  transform: translateY(-1px);
+}
+
+.action-danger {
+  background: #ef4444;
+  color: white;
+}
+
+.action-danger:hover {
+  background: #dc2626;
+  transform: translateY(-1px);
+}
+
+/* Modal styles */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal-content {
+  background: white;
+  border-radius: 1rem;
+  width: 90%;
+  max-width: 600px;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1.5rem;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.modal-title {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: #1e293b;
+  margin: 0;
+}
+
+.modal-close {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0.5rem;
+  border-radius: 0.5rem;
+  color: #64748b;
+  transition: background-color 0.2s;
+}
+
+.modal-close:hover {
+  background: #f1f5f9;
+}
+
+.modal-form {
+  padding: 1.5rem;
+}
+
+.form-group {
+  margin-bottom: 1rem;
+}
+
+.form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+.form-label {
+  display: block;
+  font-weight: 600;
+  color: #374151;
+  margin-bottom: 0.5rem;
+  font-size: 0.875rem;
+}
+
+.form-input,
+.form-select {
+  width: 100%;
+  padding: 0.75rem;
+  border: 2px solid #e2e8f0;
+  border-radius: 0.5rem;
+  font-size: 0.875rem;
+  transition: border-color 0.2s;
+}
+
+.form-input:focus,
+.form-select:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.checkbox-group {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+}
+
+.checkbox-input {
+  width: 1rem;
+  height: 1rem;
+  accent-color: #3b82f6;
+}
+
+.checkbox-text {
+  font-size: 0.875rem;
+  color: #374151;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 1rem;
+  margin-top: 2rem;
+  padding-top: 1rem;
+  border-top: 1px solid #e5e7eb;
+}
+</style>

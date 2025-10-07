@@ -1,6 +1,20 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { storageService } from '../services/storage'
+import { useCompleteHybridService, type CompleteArticle, type CompleteProduction, type CompleteLivraison, type CompleteCommande } from '@/services/completeHybridService'
+
+// Service Supabase
+const {
+  getArticles,
+  getProductions,
+  getLivraisons,
+  getCommandes,
+  getStockInfo,
+  getProductionsDuJour,
+  getLivraisonsRecentes,
+  getProductionParSemaine
+} = useCompleteHybridService()
+
 import {
   CubeIcon,
   ArchiveBoxIcon,
@@ -20,22 +34,104 @@ import {
 } from '@heroicons/vue/24/outline'
 import BarChart from '../components/charts/BarChart.vue'
 
-// Données réelles depuis localStorage
+// Variables réactives pour les données Supabase
+const supabaseData = ref({
+  articles: [] as CompleteArticle[],
+  productions: [] as CompleteProduction[],
+  livraisons: [] as CompleteLivraison[],
+  commandes: [] as CompleteCommande[],
+  stockInfo: {} as any,
+  productionsDuJour: {} as any,
+  livraisonsRecentes: {} as any,
+  productionParSemaine: {} as any
+})
+
+const loading = ref(false)
+const error = ref<string | null>(null)
+
+// Fonction pour charger les données Supabase
+const loadSupabaseData = async () => {
+  console.log('🔍 [HomeView] Chargement des données Supabase...')
+  loading.value = true
+  error.value = null
+  
+  try {
+    // Charger toutes les données en parallèle
+    const [
+      articles,
+      productions,
+      livraisons,
+      commandes,
+      stockInfo,
+      productionsDuJour,
+      livraisonsRecentes,
+      productionParSemaine
+    ] = await Promise.all([
+      getArticles(),
+      getProductions(),
+      getLivraisons(),
+      getCommandes(),
+      getStockInfo(),
+      getProductionsDuJour(),
+      getLivraisonsRecentes(),
+      getProductionParSemaine()
+    ])
+    
+    // Mettre à jour les données
+    supabaseData.value = {
+      articles,
+      productions,
+      livraisons,
+      commandes,
+      stockInfo,
+      productionsDuJour,
+      livraisonsRecentes,
+      productionParSemaine
+    }
+    
+    console.log('✅ [HomeView] Données Supabase chargées:', {
+      articles: articles.length,
+      productions: productions.length,
+      livraisons: livraisons.length,
+      commandes: commandes.length
+    })
+    
+  } catch (err) {
+    console.error('❌ [HomeView] Erreur lors du chargement Supabase:', err)
+    error.value = 'Erreur lors du chargement des données'
+    // En cas d'erreur, les données localStorage seront utilisées via le fallback
+  } finally {
+    loading.value = false
+  }
+}
+
+// Données réelles depuis Supabase (avec fallback localStorage)
 const kpiData = computed(() => {
-  const productions = storageService.getProductions()
-  const livraisons = storageService.getLivraisons()
-  const stock = storageService.getStock()
+  // Utiliser les données Supabase si disponibles, sinon fallback sur localStorage
+  const productions = supabaseData.value.productions.length > 0 ? supabaseData.value.productions : storageService.getProductions()
+  const livraisons = supabaseData.value.livraisons.length > 0 ? supabaseData.value.livraisons : storageService.getLivraisons()
+  const stock = supabaseData.value.articles.length > 0 ? supabaseData.value.articles : storageService.getStock()
+  
+  // Date d'aujourd'hui
+  const today = new Date().toISOString().split('T')[0]
   
   // Calculer la production d'aujourd'hui basée sur les articles
-  const productionToday = storageService.getProductionToday()
+  const productionToday = productions
+    .filter((p: any) => p.date === today && p.statut === 'termine')
+    .reduce((sum: any, p: any) => {
+      if (p.articlesProduits && Array.isArray(p.articlesProduits)) {
+        return sum + p.articlesProduits.reduce((articleSum: any, article: any) => articleSum + article.quantiteProduite, 0)
+      }
+      return sum
+    }, 0)
   
   // Calculer la production d'hier basée sur les articles
   const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().split('T')[0]
   const productionYesterday = productions
-    .filter(p => p.date === yesterday && p.statut === 'termine')
-    .reduce((sum, p) => {
+    .filter((p: any) => p.date === yesterday && p.statut === 'termine')
+    .reduce((sum: any, p: any) => {
       if (p.articlesProduits && Array.isArray(p.articlesProduits)) {
-        return sum + p.articlesProduits.reduce((articleSum, article) => articleSum + article.quantiteProduite, 0)
+        return sum + p.articlesProduits.reduce((articleSum: any, article: any) => articleSum + article.quantiteProduite, 0)
       }
       return sum
     }, 0)
@@ -44,15 +140,15 @@ const kpiData = computed(() => {
   
   // Calculer le total des articles produits (remplace les palettes)
   const totalArticlesProduits = productions
-    .filter(p => p.statut === 'termine')
-    .reduce((sum, p) => {
+    .filter((p: any) => p.statut === 'termine')
+    .reduce((sum: any, p: any) => {
       if (p.articlesProduits && Array.isArray(p.articlesProduits)) {
-        return sum + p.articlesProduits.reduce((articleSum, article) => articleSum + article.quantiteProduite, 0)
+        return sum + p.articlesProduits.reduce((articleSum: any, article: any) => articleSum + article.quantiteProduite, 0)
       }
       return sum
     }, 0)
   
-  const stockCritique = stock.filter(s => s.stock <= s.seuilCritique).length
+  const stockCritique = stock.filter((s: any) => s.stock <= s.seuilCritique).length
   
   return {
     production: {
@@ -88,12 +184,12 @@ const productionData = computed(() => {
   }).reverse()
   
   return last7Days.map(date => {
-    const dayProductions = productions.filter(p => p.date === date && p.statut === 'termine')
+    const dayProductions = productions.filter((p: any) => p.date === date && p.statut === 'termine')
     return {
       jour: new Date(date).toLocaleDateString('fr-FR', { weekday: 'short' }),
-      production: dayProductions.reduce((sum, p) => {
+      production: dayProductions.reduce((sum: any, p: any) => {
         if (p.articlesProduits && Array.isArray(p.articlesProduits)) {
-          return sum + p.articlesProduits.reduce((articleSum, article) => articleSum + article.quantiteProduite, 0)
+          return sum + p.articlesProduits.reduce((articleSum: any, article: any) => articleSum + article.quantiteProduite, 0)
         }
         return sum
       }, 0),
@@ -104,7 +200,7 @@ const productionData = computed(() => {
 
 const stockData = computed(() => {
   const stock = storageService.getStock()
-  return stock.map(item => ({
+  return stock.map((item: any) => ({
     article: item.nom,
     stock: item.stock,
     seuil: item.seuilCritique
@@ -123,7 +219,7 @@ const alertes = computed(() => {
   }> = []
   
   // Alertes de stock critique
-  stock.forEach(item => {
+  stock.forEach((item: any) => {
     if (item.stock <= item.seuilCritique) {
       alertesList.push({
         id: `stock-${item.id}`,
@@ -135,12 +231,12 @@ const alertes = computed(() => {
   })
   
   // Alertes de livraisons récentes
-  const recentLivraisons = livraisons.filter(l => l.statut === 'livre').slice(0, 2)
+  const recentLivraisons = livraisons.filter((l: any) => l.statut === 'livre').slice(0, 2)
   recentLivraisons.forEach(livraison => {
     alertesList.push({
-      id: `livraison-${livraison.id}`,
+      id: `livraison-${(livraison as any).id}`,
       type: 'info',
-      message: `Livraison ${livraison.numeroBL} confirmée`,
+      message: `Livraison ${(livraison as any).numeroBL} confirmée`,
       time: 'Récemment'
     })
   })
@@ -169,9 +265,9 @@ const productionOverview = computed(() => {
   const productions = storageService.getProductions()
   const today = new Date().toISOString().split('T')[0]
 
-  const productionsToday = productions.filter(p => p.date === today)
-  const productionsEnCours = productionsToday.filter(p => p.statut === 'en_cours')
-  const productionsTerminees = productionsToday.filter(p => p.statut === 'termine')
+  const productionsToday = productions.filter((p: any) => p.date === today)
+  const productionsEnCours = productionsToday.filter((p: any) => p.statut === 'en_cours')
+  const productionsTerminees = productionsToday.filter((p: any) => p.statut === 'termine')
 
   return {
     total: productions.length,
@@ -185,16 +281,16 @@ const productionOverview = computed(() => {
 const articlesOverview = computed(() => {
   const stock = storageService.getStock()
   const totalArticles = stock.length
-  const articlesActifs = stock.filter(a => a.actif).length
-  const articlesCritiques = stock.filter(a => a.stock <= a.seuilCritique).length
-  const stockTotal = stock.reduce((sum, a) => sum + a.stock, 0)
+  const articlesActifs = stock.filter((a: any) => a.actif).length
+  const articlesCritiques = stock.filter((a: any) => a.stock <= a.seuilCritique).length
+  const stockTotal = stock.reduce((sum: any, a: any) => sum + a.stock, 0)
 
   return {
     total: totalArticles,
     actifs: articlesActifs,
     critiques: articlesCritiques,
     stockTotal,
-    topArticles: stock.sort((a, b) => b.stock - a.stock).slice(0, 5)
+    topArticles: stock.sort((a: any, b: any) => b.stock - a.stock).slice(0, 5)
   }
 })
 
@@ -202,12 +298,12 @@ const livraisonsOverview = computed(() => {
   const livraisons = storageService.getLivraisons()
   const commandes = storageService.getCommandes()
 
-  const livraisonsEnAttente = livraisons.filter(l => l.statut === 'en_attente').length
-  const livraisonsEnCours = livraisons.filter(l => l.statut === 'en_cours').length
-  const livraisonsTerminees = livraisons.filter(l => l.statut === 'livre').length
+  const livraisonsEnAttente = livraisons.filter((l: any) => l.statut === 'en_attente').length
+  const livraisonsEnCours = livraisons.filter((l: any) => l.statut === 'en_cours').length
+  const livraisonsTerminees = livraisons.filter((l: any) => l.statut === 'livre').length
 
-  const commandesEnAttente = commandes.filter(c => c.statut === 'en_attente').length
-  const commandesConfirmees = commandes.filter(c => c.statut === 'confirmee').length
+  const commandesEnAttente = commandes.filter((c: any) => c.statut === 'en_attente').length
+  const commandesConfirmees = commandes.filter((c: any) => c.statut === 'confirmee').length
 
   return {
     livraisons: {
@@ -224,6 +320,12 @@ const livraisonsOverview = computed(() => {
       recentes: commandes.slice(-5).reverse()
     }
   }
+})
+
+// Lifecycle
+onMounted(() => {
+  console.log('🚀 [HomeView] onMounted - Chargement des données Supabase')
+  loadSupabaseData()
 })
 
 </script>
@@ -250,6 +352,10 @@ const livraisonsOverview = computed(() => {
               <div class="flex items-center">
                 <div class="h-2 w-2 bg-green-500 rounded-full mr-2 animate-pulse"></div>
                 <span>Système opérationnel</span>
+              </div>
+              <div v-if="loading" class="flex items-center">
+                <div class="h-2 w-2 bg-blue-500 rounded-full mr-2 animate-spin"></div>
+                <span>Chargement Supabase...</span>
               </div>
             </div>
           </div>
@@ -472,17 +578,17 @@ const livraisonsOverview = computed(() => {
           <div class="space-y-3">
             <h4 class="font-medium text-gray-900 text-sm">Productions récentes</h4>
             <div class="space-y-2">
-              <div v-for="production in productionOverview.productionsRecentes.slice(0, 3)" :key="production.id" class="flex items-center justify-between p-2 bg-gray-50 rounded-lg">
+              <div v-for="production in productionOverview.productionsRecentes.slice(0, 3)" :key="(production as any).id" class="flex items-center justify-between p-2 bg-gray-50 rounded-lg">
                 <div class="flex-1">
-                  <p class="text-sm font-medium text-gray-900">Production {{ production.lotId }}</p>
-                  <p class="text-xs text-gray-500">{{ new Date(production.date).toLocaleDateString('fr-FR') }}</p>
+                  <p class="text-sm font-medium text-gray-900">Production {{ (production as any).lotId }}</p>
+                  <p class="text-xs text-gray-500">{{ new Date((production as any).date).toLocaleDateString('fr-FR') }}</p>
                 </div>
                 <span class="inline-flex px-2 py-1 text-xs font-medium rounded-full" :class="{
-                  'bg-green-100 text-green-800': production.statut === 'termine',
-                  'bg-blue-100 text-blue-800': production.statut === 'en_cours',
-                  'bg-yellow-100 text-yellow-800': production.statut === 'en_attente'
+                  'bg-green-100 text-green-800': (production as any).statut === 'termine',
+                  'bg-blue-100 text-blue-800': (production as any).statut === 'en_cours',
+                  'bg-yellow-100 text-yellow-800': (production as any).statut === 'en_attente'
                 }">
-                  {{ production.statut === 'termine' ? 'Terminé' : production.statut === 'en_cours' ? 'En cours' : 'En attente' }}
+                  {{ (production as any).statut === 'termine' ? 'Terminé' : (production as any).statut === 'en_cours' ? 'En cours' : 'En attente' }}
                 </span>
               </div>
             </div>
@@ -522,18 +628,18 @@ const livraisonsOverview = computed(() => {
           <div class="space-y-3">
             <h4 class="font-medium text-gray-900 text-sm">Articles en stock</h4>
             <div class="space-y-2">
-              <div v-for="article in articlesOverview.topArticles.slice(0, 3)" :key="article.id" class="flex items-center justify-between p-2 bg-gray-50 rounded-lg">
+              <div v-for="article in articlesOverview.topArticles.slice(0, 3)" :key="(article as any).id" class="flex items-center justify-between p-2 bg-gray-50 rounded-lg">
                 <div class="flex-1">
-                  <p class="text-sm font-medium text-gray-900">{{ article.nom }}</p>
-                  <p class="text-xs text-gray-500">{{ article.unite }}</p>
+                  <p class="text-sm font-medium text-gray-900">{{ (article as any).nom }}</p>
+                  <p class="text-xs text-gray-500">{{ (article as any).unite }}</p>
                 </div>
                 <div class="text-right">
                   <p class="text-sm font-bold" :class="{
-                    'text-red-600': article.stock <= article.seuilCritique,
-                    'text-yellow-600': article.stock <= article.seuilCritique * 2 && article.stock > article.seuilCritique,
-                    'text-green-600': article.stock > article.seuilCritique * 2
-                  }">{{ article.stock }}</p>
-                  <p class="text-xs text-gray-500">{{ article.unite }}</p>
+                    'text-red-600': (article as any).stock <= (article as any).seuilCritique,
+                    'text-yellow-600': (article as any).stock <= (article as any).seuilCritique * 2 && (article as any).stock > (article as any).seuilCritique,
+                    'text-green-600': (article as any).stock > (article as any).seuilCritique * 2
+                  }">{{ (article as any).stock }}</p>
+                  <p class="text-xs text-gray-500">{{ (article as any).unite }}</p>
                 </div>
               </div>
             </div>
@@ -573,17 +679,17 @@ const livraisonsOverview = computed(() => {
           <div class="space-y-3">
             <h4 class="font-medium text-gray-900 text-sm">Livraisons récentes</h4>
             <div class="space-y-2">
-              <div v-for="livraison in livraisonsOverview.livraisons.recentes.slice(0, 3)" :key="livraison.id" class="flex items-center justify-between p-2 bg-gray-50 rounded-lg">
+              <div v-for="livraison in livraisonsOverview.livraisons.recentes.slice(0, 3)" :key="(livraison as any).id" class="flex items-center justify-between p-2 bg-gray-50 rounded-lg">
                 <div class="flex-1">
-                  <p class="text-sm font-medium text-gray-900">{{ livraison.client }}</p>
-                  <p class="text-xs text-gray-500">#{{ livraison.numeroBL }}</p>
+                  <p class="text-sm font-medium text-gray-900">{{ (livraison as any).client }}</p>
+                  <p class="text-xs text-gray-500">#{{ (livraison as any).numeroBL }}</p>
                 </div>
                 <span class="inline-flex px-2 py-1 text-xs font-medium rounded-full" :class="{
-                  'bg-green-100 text-green-800': livraison.statut === 'livre',
-                  'bg-blue-100 text-blue-800': livraison.statut === 'en_cours',
-                  'bg-yellow-100 text-yellow-800': livraison.statut === 'en_attente'
+                  'bg-green-100 text-green-800': (livraison as any).statut === 'livre',
+                  'bg-blue-100 text-blue-800': (livraison as any).statut === 'en_cours',
+                  'bg-yellow-100 text-yellow-800': (livraison as any).statut === 'en_attente'
                 }">
-                  {{ livraison.statut === 'livre' ? 'Livré' : livraison.statut === 'en_cours' ? 'En cours' : 'En attente' }}
+                  {{ (livraison as any).statut === 'livre' ? 'Livré' : (livraison as any).statut === 'en_cours' ? 'En cours' : 'En attente' }}
                 </span>
               </div>
             </div>
@@ -623,18 +729,18 @@ const livraisonsOverview = computed(() => {
           <div class="space-y-3">
             <h4 class="font-medium text-gray-900 text-sm">Commandes récentes</h4>
             <div class="space-y-2">
-              <div v-for="commande in livraisonsOverview.commandes.recentes.slice(0, 3)" :key="commande.id" class="flex items-center justify-between p-2 bg-gray-50 rounded-lg">
+              <div v-for="commande in livraisonsOverview.commandes.recentes.slice(0, 3)" :key="(commande as any).id" class="flex items-center justify-between p-2 bg-gray-50 rounded-lg">
                 <div class="flex-1">
-                  <p class="text-sm font-medium text-gray-900">{{ commande.client }}</p>
-                  <p class="text-xs text-gray-500">#{{ commande.numeroCommande }}</p>
+                  <p class="text-sm font-medium text-gray-900">{{ (commande as any).client }}</p>
+                  <p class="text-xs text-gray-500">#{{ (commande as any).numeroCommande }}</p>
                 </div>
                 <span class="inline-flex px-2 py-1 text-xs font-medium rounded-full" :class="{
-                  'bg-green-100 text-green-800': commande.statut === 'livree',
-                  'bg-orange-100 text-orange-800': commande.statut === 'en_preparation',
-                  'bg-blue-100 text-blue-800': commande.statut === 'confirmee',
-                  'bg-yellow-100 text-yellow-800': commande.statut === 'en_attente'
+                  'bg-green-100 text-green-800': (commande as any).statut === 'livree',
+                  'bg-orange-100 text-orange-800': (commande as any).statut === 'en_preparation',
+                  'bg-blue-100 text-blue-800': (commande as any).statut === 'confirmee',
+                  'bg-yellow-100 text-yellow-800': (commande as any).statut === 'en_attente'
                 }">
-                  {{ commande.statut === 'livree' ? 'Livrée' : commande.statut === 'en_preparation' ? 'Préparation' : commande.statut === 'confirmee' ? 'Confirmée' : 'En attente' }}
+                  {{ (commande as any).statut === 'livree' ? 'Livrée' : (commande as any).statut === 'en_preparation' ? 'Préparation' : (commande as any).statut === 'confirmee' ? 'Confirmée' : 'En attente' }}
                 </span>
               </div>
             </div>

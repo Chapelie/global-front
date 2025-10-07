@@ -1,17 +1,24 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { storageService, type Livraison } from '../services/storage'
-import LivraisonAvecSignature from '../components/LivraisonAvecSignature.vue'
+import { useCompleteHybridService, type CompleteLivraison, type CompleteCommande, type CompleteArticle } from '../services/completeHybridService'
+// LivraisonAvecSignature supprimé - plus nécessaire
 import BordereauViewer from '../components/BordereauViewer.vue'
+import BLGenerator from '../components/BLGenerator.vue'
+
+// Service hybride
+const { getLivraisons, addLivraison, updateLivraison, deleteLivraison, getCommandes, updateCommande } = useCompleteHybridService()
 
 // État réactif
-const livraisons = ref<Livraison[]>([])
+const livraisons = ref<CompleteLivraison[]>([])
+const commandes = ref<CompleteCommande[]>([])
 const showModal = ref(false)
-const showSignatureModal = ref(false)
+// showSignatureModal supprimé - plus nécessaire
 const showBordereauModal = ref(false)
-const editingLivraison = ref<Livraison | null>(null)
-const selectedLivraison = ref<Livraison | null>(null)
-const selectedBordereauLivraison = ref<Livraison | null>(null)
+const showBLGenerator = ref(false)
+const editingLivraison = ref<CompleteLivraison | null>(null)
+const selectedLivraison = ref<CompleteLivraison | null>(null)
+const selectedBordereauLivraison = ref<CompleteLivraison | null>(null)
+const selectedBLLivraison = ref<CompleteLivraison | null>(null)
 const activeTab = ref<'nonTerminees' | 'terminees'>('nonTerminees')
 
 // Nouvelle livraison
@@ -19,10 +26,10 @@ const newLivraison = ref({
   client: '',
   telephone: '',
   chauffeur: 'Camion de livraison',
-  produits: [{ nom: '', quantite: 0, unite: 'pièces', quantiteCommandee: 0, quantiteLivree: 0, difference: 0, resteAPayer: 0 }],
+  produits: [{ nom: '', quantite: 0, unite: 'pièces', quantiteCommandee: 0, quantiteLivree: 0, difference: 0, resteAPayer: 0, notes: '' }],
   statut: 'en_attente' as 'en_attente' | 'en_cours' | 'livre' | 'annule',
   adresse: '',
-  numeroBL: '',
+  numeroBl: '',
   codeSuivi: '',
   date: new Date().toISOString(),
   totalCommande: 0,
@@ -37,8 +44,13 @@ const livraisonsEnAttente = computed(() => livraisons.value.filter(l => l.statut
 const livraisonsEnCours = computed(() => livraisons.value.filter(l => l.statut === 'en_cours').length)
 const livraisonsLivre = computed(() => livraisons.value.filter(l => l.statut === 'livre').length)
 
+// Computed pour les commandes prêtes pour livraison (commandes confirmées et préparées)
+const commandesALivrer = computed(() => {
+  return commandes.value.filter(c => c.statut === 'confirmee' || c.statut === 'en_preparation')
+})
+
 // Computed pour vérifier si une livraison est complètement livrée
-const isLivraisonComplete = (livraison: Livraison) => {
+const isLivraisonComplete = (livraison: CompleteLivraison) => {
   return livraison.produits.every(produit => {
     const quantiteCommandee = produit.quantiteCommandee || produit.quantite || 0
     const quantiteLivree = produit.quantiteLivree || 0
@@ -70,29 +82,119 @@ const livraisonsTerminees = computed(() => {
 })
 
 // Computed pour les produits disponibles avec stock
-const produitsDisponibles = computed(() => {
-  return storageService.getStock().filter(article => article.stock > 0)
-})
+const produitsDisponibles = ref<CompleteArticle[]>([])
 
-// Méthodes
-const loadLivraisons = () => {
-  livraisons.value = storageService.getLivraisons()
+const loadProduitsDisponibles = async () => {
+  try {
+    const { getArticles } = useCompleteHybridService()
+    const articles = await getArticles()
+    produitsDisponibles.value = articles.filter(article => article.stock > 0)
+  } catch (error) {
+    console.error('❌ [LivraisonView] Erreur lors du chargement des articles:', error)
+    produitsDisponibles.value = []
+  }
 }
 
-const openModal = (livraison?: Livraison) => {
+// Méthodes
+const loadLivraisons = async () => {
+  try {
+    console.log('🔍 [LivraisonView] Chargement des livraisons depuis Supabase')
+    livraisons.value = await getLivraisons()
+    console.log('✅ [LivraisonView] Livraisons chargées:', livraisons.value.length)
+  } catch (error) {
+    console.error('❌ [LivraisonView] Erreur lors du chargement des livraisons:', error)
+  }
+}
+
+const loadCommandes = async () => {
+  try {
+    console.log('🔍 [LivraisonView] Chargement des commandes depuis Supabase')
+    commandes.value = await getCommandes()
+    console.log('✅ [LivraisonView] Commandes chargées:', commandes.value.length)
+    
+    // Afficher les commandes confirmées et préparées pour livraison
+    const commandesPretes = commandes.value.filter(c => c.statut === 'confirmee' || c.statut === 'en_preparation')
+    console.log('📦 [LivraisonView] Commandes confirmées et préparées pour livraison:', commandesPretes.length)
+  } catch (error) {
+    console.error('❌ [LivraisonView] Erreur lors du chargement des commandes:', error)
+  }
+}
+
+const creerLivraisonDepuisCommande = async (commande: CompleteCommande) => {
+  try {
+    console.log('🔍 [LivraisonView] Création de livraison pour commande:', commande.numeroCommande)
+    
+    // Créer la livraison à partir de la commande
+    const livraisonData = {
+      numeroBl: `BL-${Date.now()}`,
+      date: new Date().toISOString().split('T')[0],
+      client: commande.client,
+      telephone: commande.telephone,
+      chauffeur: '',
+      produits: commande.produits.map(p => ({
+        nom: p.nom,
+        quantite: p.quantite,
+        unite: p.unite,
+        quantiteCommandee: p.quantite,
+        quantiteLivree: 0,
+        difference: p.quantite,
+        resteAPayer: 0,
+        notes: ''
+      })),
+      statut: 'en_attente' as const,
+      adresse: commande.adresse,
+      codeSuivi: `CS-${Date.now()}`,
+      totalCommande: 0,
+      totalLivraison: 0,
+      differenceTotale: 0,
+      resteAPayerTotal: 0,
+      commandeId: commande.id
+    }
+
+    // Créer la livraison
+    console.log('🔍 [LivraisonView] Création de la livraison...')
+    const livraisonCreee = await addLivraison(livraisonData)
+    console.log('✅ [LivraisonView] Livraison créée:', livraisonCreee)
+    
+    // Mettre à jour le statut de la commande vers "livree"
+    console.log('🔍 [LivraisonView] Mise à jour du statut de la commande...')
+    await updateCommande(commande.id!, { statut: 'livree' })
+    console.log('✅ [LivraisonView] Commande mise à jour vers "livree"')
+    
+    // Recharger les données
+    console.log('🔍 [LivraisonView] Rechargement des données...')
+    await loadLivraisons()
+    await loadCommandes()
+    
+    console.log('✅ [LivraisonView] Livraison créée et commande mise à jour')
+    alert(`Livraison créée pour la commande ${commande.numeroCommande}. La commande est maintenant livrée.`)
+  } catch (error) {
+    console.error('❌ [LivraisonView] Erreur lors de la création de la livraison:', error)
+    alert('Erreur lors de la création de la livraison')
+  }
+}
+
+const openModal = (livraison?: CompleteLivraison) => {
   if (livraison) {
     editingLivraison.value = livraison
-    newLivraison.value = { ...livraison }
+    newLivraison.value = { 
+      ...livraison, 
+      numeroBl: livraison.numeroBl,
+      produits: livraison.produits.map(p => ({
+        ...p,
+        notes: (p as any).notes || ''
+      }))
+    }
   } else {
     editingLivraison.value = null
     newLivraison.value = {
       client: '',
       telephone: '',
       chauffeur: 'Camion de livraison',
-      produits: [{ nom: '', quantite: 0, unite: 'pièces', quantiteCommandee: 0, quantiteLivree: 0, difference: 0, resteAPayer: 0 }],
+      produits: [{ nom: '', quantite: 0, unite: 'pièces', quantiteCommandee: 0, quantiteLivree: 0, difference: 0, resteAPayer: 0, notes: '' }],
       statut: 'en_attente' as 'en_attente' | 'en_cours' | 'livre' | 'annule',
       adresse: '',
-      numeroBL: '',
+      numeroBl: '',
       codeSuivi: '',
       date: new Date().toISOString(),
       totalCommande: 0,
@@ -110,169 +212,168 @@ const closeModal = () => {
 }
 
 const addProduit = () => {
-  newLivraison.value.produits.push({ nom: '', quantite: 0, unite: 'pièces', quantiteCommandee: 0, quantiteLivree: 0, difference: 0, resteAPayer: 0 })
+  newLivraison.value.produits.push({ nom: '', quantite: 0, unite: 'pièces', quantiteCommandee: 0, quantiteLivree: 0, difference: 0, resteAPayer: 0, notes: '' })
 }
 
 const removeProduit = (index: number) => {
   newLivraison.value.produits.splice(index, 1)
 }
 
-const saveLivraison = () => {
-  // Vérification de stock avant de sauvegarder la livraison
-  const stock = storageService.getStock()
-  const produitsIndisponibles: string[] = []
-
-  newLivraison.value.produits.forEach(produit => {
-    const articleStock = stock.find(article => article.nom === produit.nom)
-    if (!articleStock) {
-      produitsIndisponibles.push(`${produit.nom} (article inexistant)`)
-    } else if (articleStock.stock < (produit.quantite || produit.quantiteCommandee || 0)) {
-      const quantiteDemandee = produit.quantite || produit.quantiteCommandee || 0
-      produitsIndisponibles.push(`${produit.nom} (stock: ${articleStock.stock}, demandé: ${quantiteDemandee})`)
-    }
-  })
-
-  if (produitsIndisponibles.length > 0) {
-    const message = produitsIndisponibles.length === 1 ?
-      `Le produit suivant n'est pas disponible en stock :\n\n${produitsIndisponibles[0]}` :
-      `Les produits suivants ne sont pas disponibles en stock :\n\n${produitsIndisponibles.join('\n')}`
-
-    alert(message)
-    return
-  }
-
-  if (editingLivraison.value) {
-    // Modifier une livraison existante
-    const index = livraisons.value.findIndex(l => l.id === editingLivraison.value!.id)
-    if (index !== -1) {
-      livraisons.value[index] = { ...editingLivraison.value, ...newLivraison.value }
-      storageService.saveLivraisons(livraisons.value)
-    }
-  } else {
-    // Créer une nouvelle livraison
-    const livraison = storageService.addLivraison({
-      ...newLivraison.value,
-      numeroBL: storageService.generateNumeroBL(),
-      codeSuivi: storageService.generateCodeSuivi()
-    })
-    livraisons.value.push(livraison)
-  }
-
-  closeModal()
-  loadLivraisons()
-}
-
-const commencerLivraison = (livraison: Livraison) => {
-  // Vérification de stock avant de commencer la livraison
-  const stock = storageService.getStock()
-  const produitsIndisponibles: string[] = []
-
-  livraison.produits.forEach(produit => {
-    const articleStock = stock.find(article => article.nom === produit.nom)
-    if (!articleStock) {
-      produitsIndisponibles.push(`${produit.nom} (article inexistant)`)
+const saveLivraison = async () => {
+  try {
+    if (editingLivraison.value) {
+      await updateLivraison(editingLivraison.value.id!, newLivraison.value)
+      console.log('✅ [LivraisonView] Livraison mise à jour')
     } else {
-      const quantiteDemandee = produit.quantite || produit.quantiteCommandee || 0
-      if (articleStock.stock < quantiteDemandee) {
-        produitsIndisponibles.push(`${produit.nom} (stock: ${articleStock.stock}, demandé: ${quantiteDemandee})`)
+      await addLivraison(newLivraison.value)
+      console.log('✅ [LivraisonView] Livraison créée')
+    }
+    
+    await loadLivraisons()
+    closeModal()
+    alert('Livraison enregistrée avec succès!')
+  } catch (error) {
+    console.error('❌ [LivraisonView] Erreur lors de la sauvegarde:', error)
+    alert('Erreur lors de la sauvegarde de la livraison')
+  }
+}
+
+const commencerLivraison = async (livraison: CompleteLivraison) => {
+  try {
+    // Récupérer les articles depuis le service hybride
+    const { getArticles } = useCompleteHybridService()
+    const stock = await getArticles()
+    const produitsIndisponibles: string[] = []
+
+    livraison.produits.forEach(produit => {
+      const articleStock = stock.find(article => article.nom === produit.nom)
+      if (!articleStock) {
+        produitsIndisponibles.push(`${produit.nom} (article inexistant)`)
+      } else {
+        const quantiteDemandee = produit.quantite || produit.quantiteCommandee || 0
+        if (articleStock.stock < quantiteDemandee) {
+          produitsIndisponibles.push(`${produit.nom} (stock: ${articleStock.stock}, demandé: ${quantiteDemandee})`)
+        }
       }
-    }
-  })
+    })
 
-  if (produitsIndisponibles.length > 0) {
-    const message = produitsIndisponibles.length === 1 ?
-      `Le produit suivant n'est pas disponible en stock pour cette livraison :\n\n${produitsIndisponibles[0]}\n\nVeuillez vérifier les stocks avant de commencer la livraison.` :
-      `Les produits suivants ne sont pas disponibles en stock pour cette livraison :\n\n${produitsIndisponibles.join('\n')}\n\nVeuillez vérifier les stocks avant de commencer la livraison.`
+    if (produitsIndisponibles.length > 0) {
+      const message = produitsIndisponibles.length === 1 ?
+        `Le produit suivant n'est pas disponible en stock pour cette livraison :\n\n${produitsIndisponibles[0]}\n\nVeuillez vérifier les stocks avant de commencer la livraison.` :
+        `Les produits suivants ne sont pas disponibles en stock pour cette livraison :\n\n${produitsIndisponibles.join('\n')}\n\nVeuillez vérifier les stocks avant de commencer la livraison.`
 
-    alert(message)
-    return
-  }
-
-  selectedLivraison.value = livraison
-  showSignatureModal.value = true
-}
-
-const closeSignatureModal = () => {
-  showSignatureModal.value = false
-  selectedLivraison.value = null
-}
-
-const saveLivraisonWithSignature = (livraisonMiseAJour: Livraison) => {
-  const index = livraisons.value.findIndex(l => l.id === livraisonMiseAJour.id)
-  if (index !== -1) {
-    // Calculer si la livraison est complète
-    const isComplete = isLivraisonComplete(livraisonMiseAJour)
-
-    // Mettre à jour automatiquement le statut si complètement livrée
-    if (isComplete && livraisonMiseAJour.statut !== 'livre') {
-      livraisonMiseAJour.statut = 'livre'
+      alert(message)
+      return
     }
 
-    livraisons.value[index] = livraisonMiseAJour
-    storageService.saveLivraisons(livraisons.value)
+    selectedLivraison.value = livraison
+    // showSignatureModal supprimé - plus nécessaire
+  } catch (error) {
+    console.error('❌ [LivraisonView] Erreur lors de la vérification du stock:', error)
+    alert('Erreur lors de la vérification du stock')
   }
-  closeSignatureModal()
-  loadLivraisons()
 }
+
+// Méthodes de signature supprimées - plus nécessaires
 
 // Nouvelle méthode pour clôturer manuellement une livraison
-const cloturerLivraison = (livraison: Livraison) => {
+const cloturerLivraison = async (livraison: CompleteLivraison) => {
   const produitsNonLivres = livraison.produits.filter(produit => {
     const quantiteCommandee = produit.quantiteCommandee || produit.quantite || 0
     const quantiteLivree = produit.quantiteLivree || 0
     return quantiteLivree < quantiteCommandee
   })
 
-  let message = 'Êtes-vous sûr de vouloir clôturer cette livraison ?'
-
+  // Vérifier si tous les produits sont complètement livrés
   if (produitsNonLivres.length > 0) {
-    message += `\n\nAttention : ${produitsNonLivres.length} produit(s) ne sont pas complètement livrés :`
+    let message = `Impossible de clôturer cette livraison.\n\n${produitsNonLivres.length} produit(s) ne sont pas complètement livrés :`
     produitsNonLivres.forEach(produit => {
       const quantiteCommandee = produit.quantiteCommandee || produit.quantite || 0
       const quantiteLivree = produit.quantiteLivree || 0
       const restant = quantiteCommandee - quantiteLivree
       message += `\n- ${produit.nom}: ${restant} ${produit.unite} restant(s)`
     })
+    message += '\n\nVeuillez terminer la livraison de tous les produits avant de clôturer.'
+    alert(message)
+    return
   }
 
-  if (confirm(message)) {
-    const index = livraisons.value.findIndex(l => l.id === livraison.id)
-    if (index !== -1) {
-      livraisons.value[index] = {
+  if (confirm('Êtes-vous sûr de vouloir clôturer cette livraison ?')) {
+    try {
+      const { updateLivraison } = useCompleteHybridService()
+      
+      const livraisonMiseAJour = {
         ...livraison,
         cloturee: true,
-        statut: 'livre',
-        dateClotureManuelle: new Date().toISOString(),
-        notesCloture: produitsNonLivres.length > 0 ? 'Clôturée avec livraison partielle' : 'Clôturée manuellement'
+        statut: 'livre' as const,
+        dateCloture: new Date().toISOString(),
+        notesCloture: 'Clôturée manuellement'
       }
-      storageService.saveLivraisons(livraisons.value)
+      
+      await updateLivraison(livraison.id!, livraisonMiseAJour)
+      
+      // Mettre à jour la liste locale
+      const index = livraisons.value.findIndex(l => l.id === livraison.id)
+      if (index !== -1) {
+        livraisons.value[index] = livraisonMiseAJour
+      }
+      
       loadLivraisons()
       alert('Livraison clôturée avec succès')
+    } catch (error) {
+      console.error('❌ [LivraisonView] Erreur lors de la clôture:', error)
+      alert('Erreur lors de la clôture de la livraison')
     }
   }
 }
 
 // Méthode pour rouvrir une livraison clôturée
-const rouvrirLivraison = (livraison: Livraison) => {
+const rouvrirLivraison = async (livraison: CompleteLivraison) => {
   if (confirm('Êtes-vous sûr de vouloir rouvrir cette livraison ?')) {
-    const index = livraisons.value.findIndex(l => l.id === livraison.id)
-    if (index !== -1) {
-      livraisons.value[index] = {
+    try {
+      const { updateLivraison } = useCompleteHybridService()
+      
+      const livraisonMiseAJour = {
         ...livraison,
         cloturee: false,
-        statut: 'en_cours',
-        dateClotureManuelle: undefined,
+        statut: 'en_cours' as const,
+        dateCloture: undefined,
         notesCloture: undefined
       }
-      storageService.saveLivraisons(livraisons.value)
+      
+      await updateLivraison(livraison.id!, livraisonMiseAJour)
+      
+      // Mettre à jour la liste locale
+      const index = livraisons.value.findIndex(l => l.id === livraison.id)
+      if (index !== -1) {
+        livraisons.value[index] = livraisonMiseAJour
+      }
+      
       loadLivraisons()
       alert('Livraison rouverte avec succès')
+    } catch (error) {
+      console.error('❌ [LivraisonView] Erreur lors de la réouverture:', error)
+      alert('Erreur lors de la réouverture de la livraison')
     }
   }
 }
 
+// Méthode pour récupérer les informations client depuis la commande
+const getClientInfoFromCommande = (livraison: CompleteLivraison) => {
+  if (!livraison.commandeId) return null
+  
+  const commande = commandes.value.find(c => c.id === livraison.commandeId)
+  if (!commande) return null
+  
+  return {
+    nom: commande.client,
+    telephone: commande.telephone,
+    adresse: commande.adresse
+  }
+}
+
 // Méthode pour calculer le pourcentage de livraison
-const getPourcentageLivraison = (livraison: Livraison) => {
+const getPourcentageLivraison = (livraison: CompleteLivraison) => {
   if (!livraison.produits.length) return 0
 
   const totalCommandee = livraison.produits.reduce((sum, produit) => {
@@ -286,12 +387,20 @@ const getPourcentageLivraison = (livraison: Livraison) => {
   return totalCommandee > 0 ? Math.round((totalLivree / totalCommandee) * 100) : 0
 }
 
-const telechargerBL = (livraison: Livraison) => {
+const telechargerBL = (livraison: CompleteLivraison) => {
+  // Récupérer les informations client depuis la commande
+  const clientInfo = getClientInfoFromCommande(livraison)
+  if (clientInfo) {
+    livraison.client = clientInfo.nom
+    livraison.telephone = clientInfo.telephone
+    livraison.adresse = clientInfo.adresse
+  }
+  
   selectedBordereauLivraison.value = livraison
   showBordereauModal.value = true
 }
 
-const telechargerBordereauTransfert = (livraison: Livraison) => {
+const telechargerBordereauTransfert = (livraison: CompleteLivraison) => {
   // Ouvrir une nouvelle fenêtre pour imprimer le bordereau de transfert
   const printWindow = window.open('', '_blank')
   if (printWindow) {
@@ -299,7 +408,7 @@ const telechargerBordereauTransfert = (livraison: Livraison) => {
       <!DOCTYPE html>
       <html>
         <head>
-          <title>Bordereau de Transfert - ${livraison.numeroBL}</title>
+          <title>Bordereau de Transfert - ${livraison.numeroBl}</title>
           <style>
             body { font-family: Arial, sans-serif; margin: 0; padding: 20px; }
             .transfert-bordereau { max-width: 800px; margin: 0 auto; }
@@ -340,7 +449,7 @@ const telechargerBordereauTransfert = (livraison: Livraison) => {
                 <h2 class="bordereau-title">BORDEREAU DE TRANSFERT</h2>
                 <div class="bordereau-details">
                   <p><strong>Date :</strong> ${new Date(livraison.date).toLocaleDateString('fr-FR', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
-                  <p><strong>N° Bordereau :</strong> ${livraison.numeroBL}</p>
+                  <p><strong>N° Bordereau :</strong> ${livraison.numeroBl}</p>
                   ${livraison.codeSuivi ? `<p><strong>Code de suivi :</strong> ${livraison.codeSuivi}</p>` : ''}
                 </div>
               </div>
@@ -370,7 +479,7 @@ const telechargerBordereauTransfert = (livraison: Livraison) => {
                     <tr>
                       <td>${produit.nom}</td>
                       <td style="text-align: center;">${produit.quantite} ${produit.unite}</td>
-                      <td>${produit.observation || '-'}</td>
+                      <td>-</td>
                     </tr>
                   `).join('')}
                 </tbody>
@@ -419,7 +528,7 @@ const closeBordereauModal = () => {
 }
 
 
-const getStatusText = (statut: string, livraison?: Livraison) => {
+const getStatusText = (statut: string, livraison?: CompleteLivraison) => {
   switch (statut) {
     case 'en_attente':
       return 'En attente'
@@ -437,7 +546,7 @@ const getStatusText = (statut: string, livraison?: Livraison) => {
   }
 }
 
-const getStatusClass = (statut: string, livraison?: Livraison) => {
+const getStatusClass = (statut: string, livraison?: CompleteLivraison) => {
   switch (statut) {
     case 'en_attente':
       return 'bg-yellow-100 text-yellow-800'
@@ -455,9 +564,66 @@ const getStatusClass = (statut: string, livraison?: Livraison) => {
   }
 }
 
+// Fonctions utilitaires
+const getStatutText = (statut: string) => {
+  const texts = {
+    'en_attente': 'En attente',
+    'confirmee': 'Confirmée',
+    'en_preparation': 'En préparation',
+    'en_cours': 'En cours',
+    'livre': 'Livré',
+    'annule': 'Annulé'
+  }
+  return texts[statut as keyof typeof texts] || statut
+}
+
+const formatDate = (date: string) => {
+  return new Date(date).toLocaleDateString('fr-FR')
+}
+
+// Méthodes pour le générateur de BL
+const openBLGenerator = (livraison: CompleteLivraison) => {
+  selectedBLLivraison.value = livraison
+  showBLGenerator.value = true
+}
+
+const closeBLGenerator = () => {
+  showBLGenerator.value = false
+  selectedBLLivraison.value = null
+}
+
+const onBLSaved = () => {
+  closeBLGenerator()
+  alert('Bon de Livraison généré et sauvegardé avec succès !')
+}
+
 // Initialisation
-onMounted(() => {
-  loadLivraisons()
+onMounted(async () => {
+  console.log('🔍 [LivraisonView] onMounted - Début')
+  console.log('🔍 [LivraisonView] Chargement des commandes et livraisons...')
+  
+  try {
+    await loadCommandes()
+    console.log('✅ [LivraisonView] Commandes chargées avec succès')
+  } catch (error) {
+    console.error('❌ [LivraisonView] Erreur lors du chargement des commandes:', error)
+  }
+  
+  try {
+    await loadLivraisons()
+    console.log('✅ [LivraisonView] Livraisons chargées avec succès')
+  } catch (error) {
+    console.error('❌ [LivraisonView] Erreur lors du chargement des livraisons:', error)
+  }
+  
+  try {
+    await loadProduitsDisponibles()
+    console.log('✅ [LivraisonView] Produits disponibles chargés avec succès')
+  } catch (error) {
+    console.error('❌ [LivraisonView] Erreur lors du chargement des produits:', error)
+  }
+  
+  console.log('🔍 [LivraisonView] onMounted - Fin')
 })
 </script>
 
@@ -472,7 +638,7 @@ onMounted(() => {
               <svg class="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
               </svg>
-            </div>
+        </div>
             <div>
               <h1 class="page-title">Gestion des Livraisons</h1>
               <p class="page-subtitle">Suivi des expéditions et gestion des bordereaux</p>
@@ -492,7 +658,7 @@ onMounted(() => {
     </div>
 
     <div class="main-content">
-      <!-- Statistiques -->
+    <!-- Statistiques -->
       <div class="stats-grid">
         <div class="stat-card">
           <div class="stat-content">
@@ -500,13 +666,13 @@ onMounted(() => {
               <svg class="stat-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                   </svg>
-                </div>
+          </div>
             <div class="stat-details">
               <dt class="stat-label">Total livraisons</dt>
               <dd class="stat-value">{{ totalLivraisons }}</dd>
-            </div>
-          </div>
         </div>
+          </div>
+          </div>
 
         <div class="stat-card">
           <div class="stat-content">
@@ -514,11 +680,11 @@ onMounted(() => {
               <svg class="stat-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
-                </div>
+          </div>
             <div class="stat-details">
               <dt class="stat-label">En attente</dt>
               <dd class="stat-value">{{ livraisonsEnAttente }}</dd>
-            </div>
+        </div>
           </div>
         </div>
 
@@ -528,13 +694,13 @@ onMounted(() => {
               <svg class="stat-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
                   </svg>
-                </div>
+          </div>
             <div class="stat-details">
               <dt class="stat-label">En cours</dt>
               <dd class="stat-value">{{ livraisonsEnCours }}</dd>
-            </div>
-          </div>
         </div>
+      </div>
+    </div>
 
         <div class="stat-card">
           <div class="stat-content">
@@ -542,14 +708,87 @@ onMounted(() => {
               <svg class="stat-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
-                </div>
+        </div>
             <div class="stat-details">
               <dt class="stat-label">Livrées</dt>
               <dd class="stat-value">{{ livraisonsLivre }}</dd>
-            </div>
           </div>
         </div>
       </div>
+    </div>
+
+    <!-- Commandes à livrer -->
+      <div v-if="commandesALivrer.length > 0" class="commandes-section">
+        <div class="section-header">
+          <h3 class="section-title">Commandes à livrer</h3>
+          <p class="section-subtitle">Commandes confirmées et préparées prêtes pour la livraison</p>
+        </div>
+        
+      <div class="commandes-grid">
+        <div 
+          v-for="commande in commandesALivrer" 
+          :key="commande.id"
+          class="commande-card"
+        >
+          <div class="commande-header">
+            <div class="commande-info">
+                <h4 class="commande-numero">{{ commande.numeroCommande }}</h4>
+              <p class="commande-client">{{ commande.client }}</p>
+            </div>
+            <div class="commande-statut">
+                <span class="statut-badge statut-preparation">{{ getStatutText(commande.statut) }}</span>
+            </div>
+          </div>
+          
+          <div class="commande-details">
+            <div class="detail-item">
+                <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                </svg>
+              <span>{{ commande.telephone }}</span>
+            </div>
+            <div class="detail-item">
+                <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+              <span>{{ formatDate(commande.date) }}</span>
+            </div>
+            <div class="detail-item">
+                <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
+                </svg>
+              <span>{{ commande.produits.length }} produits</span>
+            </div>
+          </div>
+
+          <div class="commande-produits">
+              <h5 class="produits-title">Produits ({{ commande.produits.length }})</h5>
+            <div class="produits-list">
+              <div 
+                v-for="produit in commande.produits" 
+                :key="produit.nom"
+                class="produit-item"
+              >
+                <span class="produit-nom">{{ produit.nom }}</span>
+                <span class="produit-quantite">{{ produit.quantite }} {{ produit.unite }}</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="commande-actions">
+            <button 
+                @click="creerLivraisonDepuisCommande(commande)" 
+              class="action-btn action-btn-primary"
+            >
+                <svg class="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                </svg>
+              Créer Livraison
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
 
       <!-- Onglets -->
       <div class="tabs-container">
@@ -591,10 +830,10 @@ onMounted(() => {
 
             <div v-else class="livraison-list">
               <div
-                v-for="livraison in livraisonsNonTerminees"
-                :key="livraison.id"
-                class="livraison-card"
-              >
+                v-for="livraison in livraisons"
+        :key="livraison.id"
+        class="livraison-card"
+      >
                 <div class="livraison-content">
                   <div class="livraison-main">
                     <div class="livraison-header-info">
@@ -602,7 +841,13 @@ onMounted(() => {
                             :class="getStatusClass(livraison.statut, livraison)">
                         {{ getStatusText(livraison.statut, livraison) }}
                       </span>
-                      <span class="livraison-number">#{{ livraison.numeroBL }}</span>
+                      <span class="livraison-number">#{{ livraison.numeroBl }}</span>
+                      
+                      <!-- Indicateur de clôture -->
+                      <span v-if="livraison.cloturee" class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+                        🔒 Clôturée
+                      </span>
+                      
                       <!-- Pourcentage de livraison -->
                       <div class="flex items-center space-x-2">
                         <div class="w-16 bg-gray-200 rounded-full h-2">
@@ -615,32 +860,32 @@ onMounted(() => {
                             }"
                             :style="{ width: `${getPourcentageLivraison(livraison)}%` }"
                           ></div>
-                        </div>
+          </div>
                         <span class="text-xs font-medium text-gray-600">{{ getPourcentageLivraison(livraison) }}%</span>
-                      </div>
-                    </div>
+          </div>
+        </div>
                     
                     <h4 class="livraison-client">{{ livraison.client }}</h4>
-                    
-                    <div class="livraison-details">
-                      <div class="detail-item">
+        
+        <div class="livraison-details">
+          <div class="detail-item">
                         <span class="detail-label">Téléphone:</span>
                         <p class="detail-value">{{ livraison.telephone }}</p>
-                      </div>
-                      <div class="detail-item">
+          </div>
+          <div class="detail-item">
                         <span class="detail-label">Adresse:</span>
                         <p class="detail-value">{{ livraison.adresse }}</p>
-                      </div>
-                      <div class="detail-item">
+          </div>
+          <div class="detail-item">
                         <span class="detail-label">Chauffeur:</span>
                         <p class="detail-value">{{ livraison.chauffeur }}</p>
-                      </div>
-                    </div>
+          </div>
+        </div>
 
                     <!-- Produits -->
                     <div class="produits-section">
                       <h5 class="produits-title">Produits à livrer</h5>
-                      <div class="produits-list">
+          <div class="produits-list">
                         <div v-for="(produit, index) in livraison.produits" :key="index" class="produit-item">
                           <span class="produit-nom">{{ produit.nom }}</span>
                           <div class="produit-quantites">
@@ -684,7 +929,7 @@ onMounted(() => {
                       <svg class="btn-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
                       </svg>
-                      Commencer
+                      {{ getPourcentageLivraison(livraison) > 0 ? 'Continuer' : 'Commencer' }}
                     </button>
 
                     <button
@@ -709,6 +954,55 @@ onMounted(() => {
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                       </svg>
                       Clôturer
+                    </button>
+
+                    <!-- Bouton rouvrir si clôturée -->
+                    <button
+                      v-if="livraison.cloturee"
+                      @click="rouvrirLivraison(livraison)"
+                      class="btn bg-blue-500 hover:bg-blue-600 text-white"
+                      title="Rouvrir cette livraison pour continuer"
+                    >
+                      <svg class="btn-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                      </svg>
+                      Rouvrir livraison
+                    </button>
+
+                    <!-- Bouton continuer si clôturée mais pas complète -->
+                    <button
+                      v-if="livraison.cloturee && !isLivraisonComplete(livraison)"
+                      @click="commencerLivraison(livraison)"
+                      class="btn bg-green-500 hover:bg-green-600 text-white"
+                      title="Continuer la livraison de cette commande"
+                    >
+                      <svg class="btn-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                      </svg>
+                      Continuer livraison
+                    </button>
+
+                    <!-- Bouton continuer si statut "livre" mais pas complètement livrée -->
+                    <button
+                      v-if="livraison.statut === 'livre' && !isLivraisonComplete(livraison) && !livraison.cloturee"
+                      @click="commencerLivraison(livraison)"
+                      class="btn bg-orange-500 hover:bg-orange-600 text-white"
+                      title="Continuer la livraison - certains produits ne sont pas encore livrés"
+                    >
+                      <svg class="btn-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                      </svg>
+                      Continuer livraison
+                    </button>
+
+                    <button
+                      @click="openBLGenerator(livraison)"
+                      class="btn bg-purple-500 hover:bg-purple-600 text-white"
+                    >
+                      <svg class="btn-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      </svg>
+                      Générer BL
                     </button>
 
                     <button
@@ -754,11 +1048,11 @@ onMounted(() => {
                             :class="getStatusClass(livraison.statut, livraison)">
                         {{ getStatusText(livraison.statut, livraison) }}
                       </span>
-                      <span class="livraison-number">#{{ livraison.numeroBL }}</span>
+                      <span class="livraison-number">#{{ livraison.numeroBl }}</span>
                       <!-- Affichage spécial pour les livraisons clôturées -->
                       <div v-if="livraison.cloturee" class="text-xs text-purple-600 font-medium">
                         Clôturée le {{ livraison.dateClotureManuelle ? new Date(livraison.dateClotureManuelle).toLocaleDateString('fr-FR') : 'N/A' }}
-                      </div>
+            </div>
                     </div>
                     
                     <h4 class="livraison-client">{{ livraison.client }}</h4>
@@ -775,8 +1069,8 @@ onMounted(() => {
                       <div class="detail-item">
                         <span class="detail-label">Chauffeur:</span>
                         <p class="detail-value">{{ livraison.chauffeur }}</p>
-                      </div>
-                    </div>
+          </div>
+        </div>
 
                     <!-- Produits livrés -->
                     <div class="produits-section">
@@ -795,8 +1089,8 @@ onMounted(() => {
                             <span v-if="produit.difference && produit.difference > 0" class="difference-badge">
                               -{{ produit.difference }}
                             </span>
-                          </div>
-                        </div>
+          </div>
+          </div>
                       </div>
                     </div>
 
@@ -804,11 +1098,11 @@ onMounted(() => {
                     <div v-if="livraison.signatureClient" class="signature-section">
                       <h5 class="signature-title">✅ Signature enregistrée</h5>
                       <img :src="livraison.signatureClient" alt="Signature du client" class="signature-image" />
-                    </div>
-                  </div>
+          </div>
+        </div>
 
-                  <div class="livraison-actions">
-                    <button
+        <div class="livraison-actions">
+          <button 
                       @click="telechargerBordereauTransfert(livraison)"
                       class="btn btn-secondary"
                     >
@@ -816,6 +1110,16 @@ onMounted(() => {
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                       </svg>
                       Bordereau de Transfert
+          </button>
+
+          <button 
+                      @click="openBLGenerator(livraison)"
+                      class="btn bg-purple-500 hover:bg-purple-600 text-white"
+                    >
+                      <svg class="btn-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      </svg>
+                      Générer BL avec signatures
                     </button>
 
                     <!-- Bouton pour rouvrir une livraison clôturée -->
@@ -829,32 +1133,25 @@ onMounted(() => {
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
                       </svg>
                       Rouvrir
-                    </button>
-                  </div>
-                </div>
-              </div>
+          </button>
+        </div>
+      </div>
+    </div>
             </div>
           </div>
         </div>
       </div>
-    </div>
+        </div>
 
-    <!-- Modal de livraison avec signature -->
-    <LivraisonAvecSignature
-      v-if="showSignatureModal && selectedLivraison"
-      :livraison="selectedLivraison"
-      :show-modal="showSignatureModal"
-      @close="closeSignatureModal"
-      @save="saveLivraisonWithSignature"
-    />
+    <!-- Modal de livraison avec signature supprimé - plus nécessaire -->
 
     <!-- Modal d'affichage du bordereau -->
     <div v-if="showBordereauModal && selectedBordereauLivraison" class="modal-overlay">
       <BordereauViewer
         :livraison="selectedBordereauLivraison"
         @close="closeBordereauModal"
-      />
-    </div>
+              />
+            </div>
 
     <!-- Modal d'édition -->
     <div v-if="showModal" class="modal-overlay">
@@ -875,23 +1172,23 @@ onMounted(() => {
         <div class="modal-body">
           <form @submit.prevent="saveLivraison" class="form">
             <div class="form-row">
-              <div class="form-group">
+            <div class="form-group">
                 <label class="form-label">Client</label>
-                <input
-                  v-model="newLivraison.client"
-                  type="text"
-                  required
-                  class="form-input"
-                />
-              </div>
-              <div class="form-group">
+              <input 
+                v-model="newLivraison.client" 
+                type="text" 
+                required 
+                class="form-input"
+              />
+            </div>
+            <div class="form-group">
                 <label class="form-label">Téléphone</label>
-                <input
-                  v-model="newLivraison.telephone"
-                  type="tel"
-                  required
-                  class="form-input"
-                />
+              <input 
+                v-model="newLivraison.telephone" 
+                type="tel" 
+                required 
+                class="form-input"
+              />
               </div>
             </div>
 
@@ -907,10 +1204,10 @@ onMounted(() => {
 
             <div class="form-group">
               <label class="form-label">Chauffeur</label>
-              <input
+              <input 
                 v-model="newLivraison.chauffeur"
-                type="text"
-                required
+                type="text" 
+                required 
                 class="form-input"
               />
             </div>
@@ -926,17 +1223,17 @@ onMounted(() => {
                 >
                   + Ajouter un produit
                 </button>
-              </div>
+            </div>
               <div class="produits-form-list">
-                <div
-                  v-for="(produit, index) in newLivraison.produits"
-                  :key="index"
+              <div 
+                v-for="(produit, index) in newLivraison.produits" 
+                :key="index"
                   class="produit-form-row"
-                >
+              >
                   <select
-                    v-model="produit.nom"
+                  v-model="produit.nom" 
                     required
-                    class="form-input"
+                  class="form-input"
                   >
                     <option value="">Sélectionner un produit</option>
                     <option
@@ -947,33 +1244,33 @@ onMounted(() => {
                       {{ article.nom }} (Stock: {{ article.stock }})
                     </option>
                   </select>
-                  <input
-                    v-model.number="produit.quantite"
-                    type="number"
-                    placeholder="Quantité"
+                <input 
+                  v-model.number="produit.quantite" 
+                  type="number" 
+                  placeholder="Quantité" 
                     min="0"
                     required
-                    class="form-input"
-                  />
-                  <input
-                    v-model="produit.unite"
+                  class="form-input"
+                />
+                <input 
+                  v-model="produit.unite" 
                     type="text"
-                    placeholder="Unité"
+                  placeholder="Unité" 
                     required
-                    class="form-input"
-                  />
-                  <button
-                    type="button"
-                    @click="removeProduit(index)"
+                  class="form-input"
+                />
+                <button 
+                  type="button" 
+                  @click="removeProduit(index)" 
                     class="remove-produit-btn"
-                  >
+                >
                     <svg class="remove-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                     </svg>
-                  </button>
-                </div>
+                </button>
               </div>
             </div>
+          </div>
 
             <div class="form-actions">
               <button
@@ -981,17 +1278,36 @@ onMounted(() => {
                 @click="closeModal"
                 class="btn btn-secondary"
               >
-                Annuler
-              </button>
+              Annuler
+            </button>
               <button
                 type="submit"
                 class="btn btn-primary"
               >
-                {{ editingLivraison ? 'Modifier' : 'Créer' }}
-              </button>
-            </div>
-          </form>
+              {{ editingLivraison ? 'Modifier' : 'Créer' }}
+            </button>
+          </div>
+        </form>
         </div>
+      </div>
+    </div>
+
+    <!-- Modal BLGenerator -->
+    <div v-if="showBLGenerator && selectedBLLivraison" class="modal-overlay" @click="closeBLGenerator">
+      <div class="modal-content modal-large" @click.stop>
+        <div class="modal-header">
+          <h2 class="modal-title">Génération du Bon de Livraison</h2>
+          <button @click="closeBLGenerator" class="modal-close">
+            <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+        <BLGenerator
+          :livraison="selectedBLLivraison"
+          @close="closeBLGenerator"
+          @saved="onBLSaved"
+        />
       </div>
     </div>
   </div>
@@ -1691,6 +2007,176 @@ onMounted(() => {
   .btn {
     width: 100%;
     justify-content: center;
+  }
+}
+
+/* Styles pour la section des commandes */
+.commandes-section {
+  margin-bottom: 2rem;
+}
+
+.commandes-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
+  gap: 1.5rem;
+  margin-top: 1.5rem;
+}
+
+.commande-card {
+  background: white;
+  border-radius: 1rem;
+  padding: 1.5rem;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+  border: 1px solid #e5e7eb;
+  transition: all 0.3s ease;
+}
+
+.commande-card:hover {
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+  transform: translateY(-2px);
+}
+
+.commande-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 1rem;
+}
+
+.commande-info h4 {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #111827;
+  margin: 0 0 0.25rem 0;
+}
+
+.commande-client {
+  color: #6b7280;
+  margin: 0;
+}
+
+.commande-statut {
+  display: flex;
+  align-items: center;
+}
+
+.statut-badge {
+  padding: 0.25rem 0.75rem;
+  border-radius: 9999px;
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.statut-confirmee {
+  background-color: #dcfce7;
+  color: #166534;
+}
+
+.statut-preparation {
+  background-color: #fef3c7;
+  color: #92400e;
+}
+
+.commande-details {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.detail-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+  color: #6b7280;
+}
+
+.commande-produits {
+  margin-bottom: 1rem;
+}
+
+.produits-title {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #374151;
+  margin: 0 0 0.5rem 0;
+}
+
+.produits-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.produit-item {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.875rem;
+}
+
+.produit-nom {
+  color: #111827;
+  font-weight: 500;
+}
+
+.produit-quantite {
+  color: #6b7280;
+}
+
+.commande-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.action-btn {
+  display: flex;
+  align-items: center;
+  padding: 0.5rem 1rem;
+  border-radius: 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  transition: all 0.2s;
+  border: none;
+  cursor: pointer;
+}
+
+.action-btn-primary {
+  background-color: #3b82f6;
+  color: white;
+}
+
+.action-btn-primary:hover {
+  background-color: #2563eb;
+}
+
+/* Styles pour la modal du générateur de BL */
+.modal-large {
+  max-width: 1200px;
+  width: 95%;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+/* Responsive design pour les modals */
+@media (max-width: 768px) {
+  .modal-large {
+    width: 98%;
+    max-width: 100%;
+    margin: 1%;
+    max-height: 95vh;
+  }
+  
+  .modal-container {
+    padding: 0.5rem;
+  }
+  
+  .modal-header {
+    padding: 1rem 0.5rem;
+  }
+  
+  .modal-body {
+    padding: 0.5rem;
   }
 }
 </style>

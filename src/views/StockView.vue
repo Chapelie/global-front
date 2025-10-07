@@ -14,14 +14,17 @@ import {
   ClockIcon,
   CurrencyDollarIcon
 } from '@heroicons/vue/24/outline'
-import { storageService, type Article } from '../services/storage'
+import { useCompleteHybridService, type CompleteArticle } from '../services/completeHybridService'
+// import SyncStatus from '../components/SyncStatus.vue'
 
-const articles = ref<Article[]>([])
+const articles = ref<CompleteArticle[]>([])
+const { getArticles, addArticle, updateArticle, deleteArticle } = useCompleteHybridService()
 
 const showModal = ref(false)
-const editingArticle = ref<Article | null>(null)
+const editingArticle = ref<CompleteArticle | null>(null)
 const selectedCategorie = ref('')
 const searchTerm = ref('')
+// const syncStatus = ref(getSyncStatus())
 
 const newArticle = ref({
   nom: '',
@@ -70,7 +73,7 @@ const articlesFiltres = computed(() => {
   if (searchTerm.value) {
     filtered = filtered.filter(a => 
       a.nom.toLowerCase().includes(searchTerm.value.toLowerCase()) ||
-      a.fournisseur.toLowerCase().includes(searchTerm.value.toLowerCase())
+      (a.fournisseur || '').toLowerCase().includes(searchTerm.value.toLowerCase())
     )
   }
   
@@ -85,13 +88,14 @@ const valeurStock = computed(() => {
   return articles.value.reduce((sum, a) => sum + (a.stock * a.prix), 0)
 })
 
-const openModal = (article?: Article) => {
+const openModal = (article?: CompleteArticle) => {
   if (article) {
     editingArticle.value = article
     newArticle.value = { 
       ...article,
-      notes: article.notes || '' // Assurer que notes n'est jamais undefined
-    }
+      notes: article.notes || '', // Assurer que notes n'est jamais undefined
+      fournisseur: article.fournisseur || '' // Assurer que fournisseur n'est jamais undefined
+    } as any
   } else {
     editingArticle.value = null
     newArticle.value = {
@@ -108,10 +112,10 @@ const openModal = (article?: Article) => {
   showModal.value = true
 }
 
-const saveArticle = () => {
+const saveArticle = async () => {
   try {
     if (editingArticle.value) {
-      storageService.updateArticle(editingArticle.value.id, {
+      await updateArticle(editingArticle.value.id!, {
         nom: newArticle.value.nom,
         categorie: newArticle.value.categorie,
         stock: newArticle.value.stock,
@@ -122,7 +126,7 @@ const saveArticle = () => {
         notes: newArticle.value.notes
       })
     } else {
-      storageService.addArticle({
+      await addArticle({
         nom: newArticle.value.nom,
         categorie: newArticle.value.categorie,
         stock: newArticle.value.stock,
@@ -140,7 +144,7 @@ const saveArticle = () => {
         actif: true
       })
     }
-    loadArticles()
+    await loadArticles()
     showModal.value = false
     editingArticle.value = null
   } catch (error) {
@@ -149,11 +153,11 @@ const saveArticle = () => {
   }
 }
 
-const deleteArticle = (id: number) => {
+const handleDeleteArticle = async (id: string) => {
   if (confirm('Êtes-vous sûr de vouloir supprimer cet article ?')) {
     try {
-      storageService.deleteArticle(id)
-      loadArticles()
+      await deleteArticle(id)
+      await loadArticles()
     } catch (error) {
       console.error('Erreur lors de la suppression:', error)
       alert('Erreur lors de la suppression de l\'article')
@@ -161,33 +165,33 @@ const deleteArticle = (id: number) => {
   }
 }
 
-const ajusterStock = (article: Article, quantite: number) => {
+const ajusterStock = async (article: CompleteArticle, quantite: number) => {
   try {
     const newStock = Math.max(0, article.stock + quantite)
-    storageService.updateArticle(article.id, { stock: newStock })
-    loadArticles()
+    await updateArticle(article.id!, { stock: newStock })
+    await loadArticles()
   } catch (error) {
     console.error('Erreur lors de l\'ajustement du stock:', error)
     alert('Erreur lors de l\'ajustement du stock')
   }
 }
 
-const getStockStatus = (article: Article) => {
+const getStockStatus = (article: CompleteArticle) => {
   const ratio = article.stock / article.seuilCritique
   if (ratio <= 1) return { color: 'text-red-600', bg: 'bg-red-100', text: 'Critique' }
   if (ratio <= 2) return { color: 'text-yellow-600', bg: 'bg-yellow-100', text: 'Faible' }
   return { color: 'text-green-600', bg: 'bg-green-100', text: 'Normal' }
 }
 
-const getStockBarColor = (article: Article) => {
+const getStockBarColor = (article: CompleteArticle) => {
   const ratio = article.stock / article.seuilCritique
   if (ratio <= 1) return 'bg-red-500'
   if (ratio <= 2) return 'bg-yellow-500'
   return 'bg-green-500'
 }
 
-const loadArticles = () => {
-  articles.value = storageService.getStock()
+const loadArticles = async () => {
+  articles.value = await getArticles()
 }
 
 onMounted(() => {
@@ -197,6 +201,9 @@ onMounted(() => {
 
 <template>
   <div class="space-y-8">
+    <!-- Statut de synchronisation -->
+    <!-- <SyncStatus /> -->
+    
     <!-- En-tête amélioré -->
     <div class="bg-gradient-to-r from-orange-50 to-red-50 rounded-3xl p-8 border border-orange-100">
       <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between">
@@ -466,7 +473,7 @@ onMounted(() => {
                 <PencilIcon class="h-5 w-5" />
               </button>
               <button
-                @click="deleteArticle(article.id)"
+                @click="deleteArticle(article.id!)"
                 class="h-10 w-10 rounded-xl bg-gray-100 hover:bg-red-100 text-gray-600 hover:text-red-600 flex items-center justify-center transition-all duration-200 hover:scale-110"
                 title="Supprimer"
               >
@@ -524,7 +531,7 @@ onMounted(() => {
           </div>
           <div class="flex items-center justify-between text-sm">
             <span class="text-gray-600 font-medium">Dernière MAJ:</span>
-            <span class="font-semibold text-gray-700">{{ new Date(article.derniereMiseAJour).toLocaleDateString('fr-FR') }}</span>
+            <span class="font-semibold text-gray-700">{{ new Date(article.derniereMiseAJour || new Date()).toLocaleDateString('fr-FR') }}</span>
           </div>
           <div v-if="article.notes" class="mt-3 p-3 bg-gray-50 rounded-xl">
             <p class="text-sm text-gray-700 italic">{{ article.notes }}</p>

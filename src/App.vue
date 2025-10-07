@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { RouterView, useRoute, useRouter } from 'vue-router'
-import { storageService } from './services/storage'
+import { useAuth } from './services/auth'
 import { useLogo } from './composables/useLogo'
 import { 
   Bars3Icon, 
@@ -43,14 +43,16 @@ const currentPage = computed(() => {
   return navigation.find(item => item.href === route.path)?.name || 'Dashboard'
 })
 
-const currentUser = computed(() => storageService.getCurrentUser())
+const { user: currentUser } = useAuth()
 
 const toggleSidebar = () => {
   sidebarOpen.value = !sidebarOpen.value
 }
 
-const handleLogout = () => {
-  storageService.logout()
+const { signOut } = useAuth()
+
+const handleLogout = async () => {
+  await signOut()
   router.push('/login')
 }
 </script>
@@ -121,11 +123,11 @@ const handleLogout = () => {
           <div class="p-4 border-t border-gray-100 bg-white">
             <div class="flex items-center p-3 rounded-xl bg-gray-50">
               <div class="h-10 w-10 rounded-full bg-gradient-to-r from-orange-500 to-orange-600 flex items-center justify-center shadow-lg">
-                <span class="text-sm font-bold text-white">{{ currentUser?.username?.charAt(0).toUpperCase() }}</span>
+                <span class="text-sm font-bold text-white">{{ (currentUser?.user_metadata?.first_name || currentUser?.email || 'U')?.charAt(0).toUpperCase() }}</span>
               </div>
               <div class="ml-3 flex-1">
-                <p class="text-sm font-semibold text-gray-900">{{ currentUser?.username }}</p>
-                <p class="text-xs text-gray-600">{{ currentUser?.role }}</p>
+                <p class="text-sm font-semibold text-gray-900">{{ currentUser?.user_metadata?.first_name || currentUser?.email }}</p>
+                <p class="text-xs text-gray-600">{{ currentUser?.user_metadata?.role }}</p>
               </div>
             </div>
           </div>
@@ -182,11 +184,11 @@ const handleLogout = () => {
         <div class="p-4 border-t border-gray-100 bg-white">
           <div class="flex items-center p-3 rounded-xl bg-gray-50">
             <div class="h-10 w-10 rounded-full bg-gradient-to-r from-orange-500 to-orange-600 flex items-center justify-center shadow-lg">
-              <span class="text-sm font-bold text-white">{{ currentUser?.username?.charAt(0).toUpperCase() }}</span>
+              <span class="text-sm font-bold text-white">{{ currentUser?.user_metadata?.first_name?.charAt(0).toUpperCase() || currentUser?.email?.charAt(0).toUpperCase() }}</span>
             </div>
             <div class="ml-3 flex-1">
-              <p class="text-sm font-semibold text-gray-900">{{ currentUser?.username }}</p>
-              <p class="text-xs text-gray-600">{{ currentUser?.role }}</p>
+              <p class="text-sm font-semibold text-gray-900">{{ currentUser?.user_metadata?.first_name || currentUser?.email }}</p>
+              <p class="text-xs text-gray-600">{{ currentUser?.user_metadata?.role || 'Utilisateur' }}</p>
             </div>
             <button
               @click="handleLogout"
@@ -236,11 +238,11 @@ const handleLogout = () => {
             <div class="flex items-center gap-x-4">
               <div class="flex items-center space-x-3 p-2 rounded-xl hover:bg-gray-50 transition-colors">
                 <div class="h-10 w-10 rounded-full bg-gradient-to-r from-orange-500 to-orange-600 flex items-center justify-center shadow-lg">
-                  <span class="text-sm font-bold text-white">{{ currentUser?.username?.charAt(0).toUpperCase() }}</span>
+                  <span class="text-sm font-bold text-white">{{ (currentUser?.user_metadata?.first_name || currentUser?.email || 'U')?.charAt(0).toUpperCase() }}</span>
                 </div>
                 <div class="hidden sm:block">
-                  <p class="text-sm font-semibold text-gray-900">{{ currentUser?.username }}</p>
-                  <p class="text-xs text-gray-600">{{ currentUser?.role }}</p>
+                  <p class="text-sm font-semibold text-gray-900">{{ currentUser?.user_metadata?.first_name || currentUser?.email }}</p>
+                  <p class="text-xs text-gray-600">{{ currentUser?.user_metadata?.role }}</p>
                 </div>
               </div>
               <button
