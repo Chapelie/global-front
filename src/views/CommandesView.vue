@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { useCompleteHybridService, type CompleteCommande } from '../services/completeHybridService'
+import { useCompleteLaravelService, type CompleteCommande } from '../services/completeLaravelService'
 import {
   PlusIcon,
   PencilIcon,
@@ -18,7 +18,7 @@ import {
   ArrowDownIcon
 } from '@heroicons/vue/24/outline'
 
-const { getCommandes, addCommande, updateCommande, deleteCommande } = useCompleteHybridService()
+const { getCommandes, addCommande, updateCommande, deleteCommande } = useCompleteLaravelService()
 const commandes = ref<CompleteCommande[]>([])
 const showModal = ref(false)
 const editingCommande = ref<CompleteCommande | null>(null)
@@ -46,7 +46,6 @@ const loadCommandes = async () => {
 const newCommande = ref({
   client: '',
   telephone: '',
-  email: '',
   adresse: '',
   produits: [{ nom: '', quantite: 0, unite: 'pièces' }],
   statut: 'en_attente' as 'en_attente' | 'confirmee' | 'en_preparation' | 'livree' | 'annulee',
@@ -109,7 +108,6 @@ const openModal = (commande?: CompleteCommande) => {
     newCommande.value = {
       client: '',
       telephone: '',
-      email: '',
       adresse: '',
       produits: [{ nom: '', quantite: 0, unite: 'pièces' }],
       statut: 'en_attente' as 'en_attente' | 'confirmee' | 'en_preparation' | 'livree' | 'annulee',
@@ -562,10 +560,6 @@ const commandesLivrees = computed(() => 0)
                 <p class="text-sm font-medium text-gray-700">Téléphone</p>
                 <p class="text-sm text-gray-900">{{ commande.telephone }}</p>
               </div>
-              <div>
-                <p class="text-sm font-medium text-gray-700">Email</p>
-                <p class="text-sm text-gray-900">{{ commande.email }}</p>
-              </div>
             </div>
 
             <div class="mb-4">
@@ -784,16 +778,6 @@ const commandesLivrees = computed(() => 0)
                       required
                       class="w-full rounded-lg border-gray-300 focus:border-orange-500 focus:ring-orange-500 bg-white"
                       placeholder="Numéro de téléphone"
-                    />
-                  </div>
-
-                  <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-2">Email</label>
-                    <input
-                      v-model="newCommande.email"
-                      type="email"
-                      class="w-full rounded-lg border-gray-300 focus:border-orange-500 focus:ring-orange-500 bg-white"
-                      placeholder="Adresse email"
                     />
                   </div>
                 </div>

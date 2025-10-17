@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { useCompleteHybridService, type CompleteLivraison, type CompleteCommande, type CompleteArticle } from '../services/completeHybridService'
+import { useCompleteLaravelService, type CompleteLivraison, type CompleteCommande, type CompleteArticle } from '../services/completeLaravelService'
 // LivraisonAvecSignature supprimé - plus nécessaire
 import BordereauViewer from '../components/BordereauViewer.vue'
 import BLGenerator from '../components/BLGenerator.vue'
 
-// Service hybride
-const { getLivraisons, addLivraison, updateLivraison, deleteLivraison, getCommandes, updateCommande } = useCompleteHybridService()
+// Service Laravel
+const { getLivraisons, addLivraison, updateLivraison, deleteLivraison, getCommandes, updateCommande } = useCompleteLaravelService()
 
 // État réactif
 const livraisons = ref<CompleteLivraison[]>([])
@@ -86,7 +86,7 @@ const produitsDisponibles = ref<CompleteArticle[]>([])
 
 const loadProduitsDisponibles = async () => {
   try {
-    const { getArticles } = useCompleteHybridService()
+    const { getArticles } = useCompleteLaravelService()
     const articles = await getArticles()
     produitsDisponibles.value = articles.filter(article => article.stock > 0)
   } catch (error) {
@@ -98,7 +98,7 @@ const loadProduitsDisponibles = async () => {
 // Méthodes
 const loadLivraisons = async () => {
   try {
-    console.log('🔍 [LivraisonView] Chargement des livraisons depuis Supabase')
+    console.log('🔍 [LivraisonView] Chargement des livraisons depuis Laravel')
     livraisons.value = await getLivraisons()
     console.log('✅ [LivraisonView] Livraisons chargées:', livraisons.value.length)
   } catch (error) {
@@ -108,7 +108,7 @@ const loadLivraisons = async () => {
 
 const loadCommandes = async () => {
   try {
-    console.log('🔍 [LivraisonView] Chargement des commandes depuis Supabase')
+    console.log('🔍 [LivraisonView] Chargement des commandes depuis Laravel')
     commandes.value = await getCommandes()
     console.log('✅ [LivraisonView] Commandes chargées:', commandes.value.length)
     
@@ -240,8 +240,8 @@ const saveLivraison = async () => {
 
 const commencerLivraison = async (livraison: CompleteLivraison) => {
   try {
-    // Récupérer les articles depuis le service hybride
-    const { getArticles } = useCompleteHybridService()
+    // Récupérer les articles depuis le service Laravel
+    const { getArticles } = useCompleteLaravelService()
     const stock = await getArticles()
     const produitsIndisponibles: string[] = []
 
@@ -300,7 +300,7 @@ const cloturerLivraison = async (livraison: CompleteLivraison) => {
 
   if (confirm('Êtes-vous sûr de vouloir clôturer cette livraison ?')) {
     try {
-      const { updateLivraison } = useCompleteHybridService()
+      const { updateLivraison } = useCompleteLaravelService()
       
       const livraisonMiseAJour = {
         ...livraison,
@@ -331,7 +331,7 @@ const cloturerLivraison = async (livraison: CompleteLivraison) => {
 const rouvrirLivraison = async (livraison: CompleteLivraison) => {
   if (confirm('Êtes-vous sûr de vouloir rouvrir cette livraison ?')) {
     try {
-      const { updateLivraison } = useCompleteHybridService()
+      const { updateLivraison } = useCompleteLaravelService()
       
       const livraisonMiseAJour = {
         ...livraison,

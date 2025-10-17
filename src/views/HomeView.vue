@@ -1,19 +1,17 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { storageService } from '../services/storage'
-import { useCompleteHybridService, type CompleteArticle, type CompleteProduction, type CompleteLivraison, type CompleteCommande } from '@/services/completeHybridService'
+import { useCompleteLaravelService, type CompleteArticle, type CompleteProduction, type CompleteLivraison, type CompleteCommande } from '@/services/completeLaravelService'
 
-// Service Supabase
+// Service Laravel
 const {
   getArticles,
   getProductions,
   getLivraisons,
   getCommandes,
   getStockInfo,
-  getProductionsDuJour,
-  getLivraisonsRecentes,
-  getProductionParSemaine
-} = useCompleteHybridService()
+  getProductionsDuJour
+} = useCompleteLaravelService()
 
 import {
   CubeIcon,
@@ -34,8 +32,8 @@ import {
 } from '@heroicons/vue/24/outline'
 import BarChart from '../components/charts/BarChart.vue'
 
-// Variables réactives pour les données Supabase
-const supabaseData = ref({
+// Variables réactives pour les données Laravel
+const laravelData = ref({
   articles: [] as CompleteArticle[],
   productions: [] as CompleteProduction[],
   livraisons: [] as CompleteLivraison[],
@@ -49,9 +47,9 @@ const supabaseData = ref({
 const loading = ref(false)
 const error = ref<string | null>(null)
 
-// Fonction pour charger les données Supabase
-const loadSupabaseData = async () => {
-  console.log('🔍 [HomeView] Chargement des données Supabase...')
+// Fonction pour charger les données Laravel
+const loadLaravelData = async () => {
+  console.log('🔍 [HomeView] Chargement des données Laravel...')
   loading.value = true
   error.value = null
   
@@ -63,22 +61,49 @@ const loadSupabaseData = async () => {
       livraisons,
       commandes,
       stockInfo,
-      productionsDuJour,
-      livraisonsRecentes,
-      productionParSemaine
+      productionsDuJour
     ] = await Promise.all([
       getArticles(),
       getProductions(),
       getLivraisons(),
       getCommandes(),
       getStockInfo(),
-      getProductionsDuJour(),
-      getLivraisonsRecentes(),
-      getProductionParSemaine()
+      getProductionsDuJour()
     ])
     
+    // Calculer les livraisons récentes
+    const recentLivraisons = livraisons
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+      .slice(0, 5)
+    const livraisonsRecentes = { total: recentLivraisons.length }
+    
+    // Calculer la production par semaine
+    const now = new Date()
+    const startOfWeek = new Date(now.setDate(now.getDate() - now.getDay() + 1))
+    const endOfWeek = new Date(now.setDate(now.getDate() - now.getDay() + 7))
+    
+    const productionsSemaine = productions.filter(p => {
+      const prodDate = new Date(p.date)
+      return prodDate >= startOfWeek && prodDate <= endOfWeek
+    })
+    
+    const parJour = {
+      lundi: productionsSemaine.filter(p => new Date(p.date).getDay() === 1).length,
+      mardi: productionsSemaine.filter(p => new Date(p.date).getDay() === 2).length,
+      mercredi: productionsSemaine.filter(p => new Date(p.date).getDay() === 3).length,
+      jeudi: productionsSemaine.filter(p => new Date(p.date).getDay() === 4).length,
+      vendredi: productionsSemaine.filter(p => new Date(p.date).getDay() === 5).length,
+      samedi: productionsSemaine.filter(p => new Date(p.date).getDay() === 6).length,
+      dimanche: productionsSemaine.filter(p => new Date(p.date).getDay() === 0).length
+    }
+    
+    const productionParSemaine = {
+      totalSemaine: productionsSemaine.length,
+      parJour
+    }
+    
     // Mettre à jour les données
-    supabaseData.value = {
+    laravelData.value = {
       articles,
       productions,
       livraisons,
@@ -89,7 +114,7 @@ const loadSupabaseData = async () => {
       productionParSemaine
     }
     
-    console.log('✅ [HomeView] Données Supabase chargées:', {
+    console.log('✅ [HomeView] Données Laravel chargées:', {
       articles: articles.length,
       productions: productions.length,
       livraisons: livraisons.length,
@@ -97,7 +122,7 @@ const loadSupabaseData = async () => {
     })
     
   } catch (err) {
-    console.error('❌ [HomeView] Erreur lors du chargement Supabase:', err)
+    console.error('❌ [HomeView] Erreur lors du chargement Laravel:', err)
     error.value = 'Erreur lors du chargement des données'
     // En cas d'erreur, les données localStorage seront utilisées via le fallback
   } finally {
@@ -105,12 +130,12 @@ const loadSupabaseData = async () => {
   }
 }
 
-// Données réelles depuis Supabase (avec fallback localStorage)
+// Données réelles depuis Laravel
 const kpiData = computed(() => {
-  // Utiliser les données Supabase si disponibles, sinon fallback sur localStorage
-  const productions = supabaseData.value.productions.length > 0 ? supabaseData.value.productions : storageService.getProductions()
-  const livraisons = supabaseData.value.livraisons.length > 0 ? supabaseData.value.livraisons : storageService.getLivraisons()
-  const stock = supabaseData.value.articles.length > 0 ? supabaseData.value.articles : storageService.getStock()
+  // Utiliser les données Laravel
+  const productions = laravelData.value.productions
+  const livraisons = laravelData.value.livraisons
+  const stock = laravelData.value.articles
   
   // Date d'aujourd'hui
   const today = new Date().toISOString().split('T')[0]
@@ -324,8 +349,8 @@ const livraisonsOverview = computed(() => {
 
 // Lifecycle
 onMounted(() => {
-  console.log('🚀 [HomeView] onMounted - Chargement des données Supabase')
-  loadSupabaseData()
+  console.log('🚀 [HomeView] onMounted - Chargement des données Laravel')
+  loadLaravelData()
 })
 
 </script>
@@ -355,7 +380,7 @@ onMounted(() => {
               </div>
               <div v-if="loading" class="flex items-center">
                 <div class="h-2 w-2 bg-blue-500 rounded-full mr-2 animate-spin"></div>
-                <span>Chargement Supabase...</span>
+                <span>Chargement Laravel...</span>
               </div>
             </div>
           </div>

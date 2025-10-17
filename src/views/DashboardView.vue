@@ -301,20 +301,19 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { useCompleteHybridService, type CompleteCommande, type CompleteLivraison, type CompleteAnalyse } from '@/services/completeHybridService'
+import { useCompleteLaravelService, type CompleteCommande, type CompleteLivraison, type CompleteAnalyse } from '@/services/completeLaravelService'
 
 const {
   getDashboardStats,
   getCommandes,
   getLivraisons,
+  getProductions,
   getAnalyses,
   getStockInfo,
-  getProductionsDuJour,
-  getLivraisonsRecentes,
-  getProductionParSemaine
-} = useCompleteHybridService()
+  getProductionsDuJour
+} = useCompleteLaravelService()
 
-console.log('🔧 [DashboardView] Service importé:', {
+console.log('🔧 [DashboardView] Service Laravel importé:', {
   getDashboardStats: !!getDashboardStats,
   getCommandes: !!getCommandes,
   getLivraisons: !!getLivraisons,
@@ -342,7 +341,7 @@ const recentCommandes = computed(() =>
 
 const livraisonsEnCours = computed(() => 
   livraisons.value
-    .filter(l => l.statut === 'en_cours' || l.statut === 'en_attente')
+    .filter(l => l.statut === 'en_cours' || l.statut === 'en_attente' || l.statut === 'en_preparation')
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
     .slice(0, 5)
 )
@@ -363,27 +362,8 @@ const loadDashboardData = async () => {
     console.log('🔍 [DashboardView] Chargement des données du dashboard...')
     console.log('🔍 [DashboardView] Vérification du mode Supabase...')
     
-    // Vérifier le mode du service
-    const { getMode, isSupabaseEnabled } = useCompleteHybridService()
-    console.log('📡 [DashboardView] Mode service:', getMode())
-    console.log('📡 [DashboardView] Supabase activé:', isSupabaseEnabled())
-    
-    // Test direct de Supabase
-    console.log('🧪 [DashboardView] Test direct de Supabase...')
-    try {
-      const { createClient } = await import('@supabase/supabase-js')
-      const supabase = createClient(
-        import.meta.env.VITE_SUPABASE_URL || 'https://your-project.supabase.co',
-        import.meta.env.VITE_SUPABASE_ANON_KEY || 'your-anon-key'
-      )
-      console.log('📡 [DashboardView] Client Supabase créé:', !!supabase)
-      
-      // Test de connexion
-      const { data, error } = await supabase.from('articles').select('count').limit(1)
-      console.log('📡 [DashboardView] Test Supabase articles:', { data, error })
-    } catch (supabaseError) {
-      console.error('❌ [DashboardView] Erreur test Supabase:', supabaseError)
-    }
+    // Mode Laravel - plus besoin de test Supabase
+    console.log('📡 [DashboardView] Mode Laravel activé - Connexion au backend Laravel')
     
     // Charger les statistiques du dashboard
     console.log('🔍 [DashboardView] Appel de getDashboardStats()...')
@@ -428,17 +408,41 @@ const loadDashboardData = async () => {
            productionsDuJour.value = productionsJour
            console.log('✅ [DashboardView] Productions du jour chargées:', productionsJour)
            
-           // Charger les livraisons récentes
-           console.log('🔍 [DashboardView] Appel de getLivraisonsRecentes()...')
-           const livraisonsRecentesData = await getLivraisonsRecentes()
-           livraisonsRecentes.value = livraisonsRecentesData
-           console.log('✅ [DashboardView] Livraisons récentes chargées:', livraisonsRecentesData)
+           // Calculer les livraisons récentes depuis les données chargées
+           console.log('🔍 [DashboardView] Calcul des livraisons récentes...')
+           const recentLivraisons = livraisons.value
+             .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+             .slice(0, 5)
+           livraisonsRecentes.value = { total: recentLivraisons.length }
+           console.log('✅ [DashboardView] Livraisons récentes calculées:', livraisonsRecentes.value)
            
-           // Charger la production par semaine
-           console.log('🔍 [DashboardView] Appel de getProductionParSemaine()...')
-           const productionSemaine = await getProductionParSemaine()
-           productionParSemaine.value = productionSemaine
-           console.log('✅ [DashboardView] Production par semaine chargée:', productionSemaine)
+           // Calculer la production par semaine depuis les données chargées
+           console.log('🔍 [DashboardView] Calcul de la production par semaine...')
+           const allProductions = await getProductions()
+           const now = new Date()
+           const startOfWeek = new Date(now.setDate(now.getDate() - now.getDay() + 1))
+           const endOfWeek = new Date(now.setDate(now.getDate() - now.getDay() + 7))
+           
+           const productionsSemaine = allProductions.filter(p => {
+             const prodDate = new Date(p.date)
+             return prodDate >= startOfWeek && prodDate <= endOfWeek
+           })
+           
+           const parJour = {
+             lundi: productionsSemaine.filter(p => new Date(p.date).getDay() === 1).length,
+             mardi: productionsSemaine.filter(p => new Date(p.date).getDay() === 2).length,
+             mercredi: productionsSemaine.filter(p => new Date(p.date).getDay() === 3).length,
+             jeudi: productionsSemaine.filter(p => new Date(p.date).getDay() === 4).length,
+             vendredi: productionsSemaine.filter(p => new Date(p.date).getDay() === 5).length,
+             samedi: productionsSemaine.filter(p => new Date(p.date).getDay() === 6).length,
+             dimanche: productionsSemaine.filter(p => new Date(p.date).getDay() === 0).length
+           }
+           
+           productionParSemaine.value = {
+             totalSemaine: productionsSemaine.length,
+             parJour
+           }
+           console.log('✅ [DashboardView] Production par semaine calculée:', productionParSemaine.value)
            
          } catch (err) {
     console.error('❌ [DashboardView] Erreur lors du chargement des données:', err)

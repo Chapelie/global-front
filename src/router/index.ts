@@ -1,5 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import { useAuth } from '../services/auth'
+import { useLaravelAuth } from '../services/laravelAuth'
 import HomeView from '../views/HomeView.vue'
 
 const router = createRouter({
@@ -88,9 +88,9 @@ const router = createRouter({
   ],
 })
 
-// Navigation guard pour vérifier l'authentification Supabase
+// Navigation guard pour vérifier l'authentification Laravel
 router.beforeEach(async (to, from, next) => {
-  const { isAuthenticated, isLoading, isInitialized } = useAuth()
+  const { isAuthenticated, isLoading, isInitialized } = useLaravelAuth()
   
   // Attendre que l'authentification soit initialisée
   if (!isInitialized.value || isLoading.value) {

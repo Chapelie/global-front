@@ -1,6 +1,7 @@
 import type { RouteLocationNormalized } from 'vue-router'
 import { useRoles } from '../services/roles'
-import type { UserRole } from '../lib/supabase'
+// Types pour les rôles utilisateur
+export type UserRole = 'superadmin' | 'admin' | 'secretaire' | 'livreur'
 
 // Définition des permissions requises pour chaque route
 export const ROUTE_PERMISSIONS: Record<string, {

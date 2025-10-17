@@ -1,13 +1,13 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { useAuth } from '../services/auth'
+import { useLaravelAuth } from '../services/laravelAuth'
 import { useLogo } from '../composables/useLogo'
 import { CubeIcon } from '@heroicons/vue/24/outline'
 
 const router = useRouter()
 const { logo, getLogoAlt, getLogoClass } = useLogo()
-const { signIn, isLoading } = useAuth()
+const { signIn, isLoading } = useLaravelAuth()
 
 const email = ref('')
 const password = ref('')
@@ -27,7 +27,11 @@ const handleLogin = async () => {
     console.log('🔐 [LoginView] Tentative de connexion')
     console.log('📧 [LoginView] Email:', email.value)
     
-    await signIn(email.value, password.value)
+    const result = await signIn({ email: email.value, password: password.value })
+    
+    if (!result.success) {
+      throw new Error(result.error || 'Erreur lors de la connexion')
+    }
     
     console.log('✅ [LoginView] Connexion réussie')
     success.value = 'Connexion réussie ! Redirection...'
@@ -126,14 +130,14 @@ const handleLogin = async () => {
               <div class="w-full border-t border-gray-300" />
             </div>
             <div class="relative flex justify-center text-sm">
-              <span class="px-2 bg-white text-gray-500">Authentification Supabase</span>
+              <span class="px-2 bg-white text-gray-500">Authentification Laravel</span>
             </div>
           </div>
 
           <div class="mt-6 space-y-3">
             <div class="bg-blue-50 rounded-lg p-3">
-              <p class="text-xs font-medium text-blue-700">Connexion Supabase</p>
-              <p class="text-xs text-blue-600">Utilisez vos identifiants Supabase</p>
+              <p class="text-xs font-medium text-blue-700">Connexion Laravel</p>
+              <p class="text-xs text-blue-600">Utilisez vos identifiants Laravel</p>
             </div>
             <div class="bg-gray-50 rounded-lg p-3">
               <p class="text-xs font-medium text-gray-700">Pas de compte ?</p>

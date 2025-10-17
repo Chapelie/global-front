@@ -232,10 +232,10 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
-import { useAuth } from '../services/auth'
+import { useLaravelAuth } from '../services/laravelAuth'
 
 const router = useRouter()
-const { signUp } = useAuth()
+const { signUp } = useLaravelAuth()
 
 const loading = ref(false)
 const error = ref('')
@@ -284,13 +284,18 @@ const handleRegister = async () => {
     console.log('📧 [RegisterView] Email:', form.value.email)
     console.log('👤 [RegisterView] Rôle:', form.value.role)
 
-    // Inscription avec métadonnées étendues
-    await signUp(form.value.email, form.value.password, {
-      first_name: form.value.firstName,
-      last_name: form.value.lastName,
-      role: form.value.role as any,
-      phone: form.value.phone
+    // Inscription avec données Laravel
+    const result = await signUp({
+      name: `${form.value.firstName} ${form.value.lastName}`,
+      email: form.value.email,
+      password: form.value.password,
+      password_confirmation: form.value.confirmPassword,
+      role: form.value.role as any
     })
+    
+    if (!result.success) {
+      throw new Error(result.error || 'Erreur lors de l\'inscription')
+    }
 
     console.log('✅ [RegisterView] Inscription réussie')
     success.value = true

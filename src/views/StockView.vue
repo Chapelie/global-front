@@ -14,11 +14,11 @@ import {
   ClockIcon,
   CurrencyDollarIcon
 } from '@heroicons/vue/24/outline'
-import { useCompleteHybridService, type CompleteArticle } from '../services/completeHybridService'
+import { useCompleteLaravelService, type CompleteArticle } from '../services/completeLaravelService'
 // import SyncStatus from '../components/SyncStatus.vue'
 
 const articles = ref<CompleteArticle[]>([])
-const { getArticles, addArticle, updateArticle, deleteArticle } = useCompleteHybridService()
+const { getArticles, addArticle, updateArticle, deleteArticle } = useCompleteLaravelService()
 
 const showModal = ref(false)
 const editingArticle = ref<CompleteArticle | null>(null)
@@ -33,7 +33,6 @@ const newArticle = ref({
   seuilCritique: 0,
   unite: '',
   prix: 0,
-  fournisseur: '',
   notes: ''
 })
 
@@ -54,14 +53,6 @@ const unites = [
   'litres'
 ]
 
-const fournisseurs = [
-  'Briqueterie du Nord',
-  'Ciments Calcia',
-  'Carrières de Bretagne',
-  'Palettes Express',
-  'Matériaux Plus',
-  'Fournitures Pro'
-]
 
 const articlesFiltres = computed(() => {
   let filtered = articles.value
@@ -72,8 +63,7 @@ const articlesFiltres = computed(() => {
   
   if (searchTerm.value) {
     filtered = filtered.filter(a => 
-      a.nom.toLowerCase().includes(searchTerm.value.toLowerCase()) ||
-      (a.fournisseur || '').toLowerCase().includes(searchTerm.value.toLowerCase())
+      a.nom.toLowerCase().includes(searchTerm.value.toLowerCase())
     )
   }
   
@@ -93,8 +83,7 @@ const openModal = (article?: CompleteArticle) => {
     editingArticle.value = article
     newArticle.value = { 
       ...article,
-      notes: article.notes || '', // Assurer que notes n'est jamais undefined
-      fournisseur: article.fournisseur || '' // Assurer que fournisseur n'est jamais undefined
+      notes: article.notes || '' // Assurer que notes n'est jamais undefined
     } as any
   } else {
     editingArticle.value = null
@@ -105,7 +94,6 @@ const openModal = (article?: CompleteArticle) => {
       seuilCritique: 0,
       unite: '',
       prix: 0,
-      fournisseur: '',
       notes: ''
     }
   }
@@ -122,7 +110,6 @@ const saveArticle = async () => {
         seuilCritique: newArticle.value.seuilCritique,
         unite: newArticle.value.unite,
         prix: newArticle.value.prix,
-        fournisseur: newArticle.value.fournisseur,
         notes: newArticle.value.notes
       })
     } else {
@@ -133,7 +120,6 @@ const saveArticle = async () => {
         seuilCritique: newArticle.value.seuilCritique,
         unite: newArticle.value.unite,
         prix: newArticle.value.prix,
-        fournisseur: newArticle.value.fournisseur,
         notes: newArticle.value.notes,
         typeProduction: 'autre',
         capaciteProduction: 0,
@@ -525,10 +511,6 @@ onMounted(() => {
 
         <!-- Pied de carte -->
         <div class="border-t border-gray-200 pt-4">
-          <div class="flex items-center justify-between text-sm mb-2">
-            <span class="text-gray-600 font-medium">Fournisseur:</span>
-            <span class="font-semibold text-gray-900">{{ article.fournisseur }}</span>
-          </div>
           <div class="flex items-center justify-between text-sm">
             <span class="text-gray-600 font-medium">Dernière MAJ:</span>
             <span class="font-semibold text-gray-700">{{ new Date(article.derniereMiseAJour || new Date()).toLocaleDateString('fr-FR') }}</span>
@@ -638,10 +620,10 @@ onMounted(() => {
               </div>
             </div>
 
-            <!-- Section 3: Prix et fournisseur -->
+            <!-- Section 3: Prix -->
             <div class="bg-green-50 rounded-2xl p-6">
-              <h4 class="text-lg font-semibold text-gray-900 mb-4">Prix et fournisseur</h4>
-              <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <h4 class="text-lg font-semibold text-gray-900 mb-4">Prix</h4>
+              <div class="grid grid-cols-1 lg:grid-cols-1 gap-6">
                 <div>
                   <label class="block text-sm font-semibold text-gray-700 mb-2">Prix unitaire (XOF) *</label>
                   <input
@@ -653,19 +635,6 @@ onMounted(() => {
                     class="w-full rounded-xl border-gray-300 focus:border-green-500 focus:ring-2 focus:ring-green-200 transition-all duration-200 px-4 py-3"
                     placeholder="1500.00"
                   />
-                </div>
-                <div>
-                  <label class="block text-sm font-semibold text-gray-700 mb-2">Fournisseur *</label>
-                  <select
-                    v-model="newArticle.fournisseur"
-                    required
-                    class="w-full rounded-xl border-gray-300 focus:border-green-500 focus:ring-2 focus:ring-green-200 transition-all duration-200 px-4 py-3"
-                  >
-                    <option value="">Sélectionner un fournisseur</option>
-                    <option v-for="fournisseur in fournisseurs" :key="fournisseur" :value="fournisseur">
-                      {{ fournisseur }}
-                    </option>
-                  </select>
                 </div>
               </div>
             </div>
