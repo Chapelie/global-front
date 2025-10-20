@@ -85,18 +85,18 @@
           <div class="user-header">
             <div class="user-avatar">
               <div class="avatar-circle">
-                {{ user.first_name.charAt(0) }}{{ user.last_name.charAt(0) }}
+                {{ (user.first_name || '?').charAt(0) }}{{ (user.last_name || '?').charAt(0) }}
               </div>
             </div>
             <div class="user-info">
-              <h3 class="user-name">{{ user.first_name }} {{ user.last_name }}</h3>
+              <h3 class="user-name">{{ user.first_name || 'Prénom' }} {{ user.last_name || 'Nom' }}</h3>
               <p class="user-email">{{ user.email }}</p>
             </div>
           </div>
 
           <div class="user-meta">
             <span :class="`role-badge role-${user.role}`">
-              {{ getRoleLabel(user.role) }}
+              {{ getRoleLabel(user.role || 'operator') }}
             </span>
             <span :class="`status-badge status-${user.actif ? 'active' : 'inactive'}`">
               {{ user.actif ? 'Actif' : 'Inactif' }}
@@ -114,7 +114,7 @@
               Modifier
             </button>
 
-            <button @click="handleDeleteUser(user.id!)" class="action-button action-danger">
+            <button @click="handleDeleteUser(String(user.id))" class="action-button action-danger">
               <TrashIcon class="h-4 w-4 mr-2" />
               Supprimer
             </button>
@@ -244,7 +244,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { useCompleteHybridService, type CompleteUser } from '@/services/completeHybridService'
+import { useLaravelApi, type LaravelUser } from '@/services/laravelApiService'
 import AutoLoginModal from '@/components/AutoLoginModal.vue'
 import {
   UserGroupIcon,
@@ -256,27 +256,22 @@ import {
   TrashIcon
 } from '@heroicons/vue/24/outline'
 
-const {
-  getUsers,
-  createUser,
-  updateUser,
-  deleteUser
-} = useCompleteHybridService()
+const { getUsers } = useLaravelApi()
 
 // État réactif
-const users = ref<CompleteUser[]>([])
+const users = ref<LaravelUser[]>([])
 const showModal = ref(false)
 const showAutoLoginModal = ref(false)
-const editingUser = ref<CompleteUser | null>(null)
-const createdUser = ref<CompleteUser | null>(null)
+const editingUser = ref<LaravelUser | null>(null)
+const createdUser = ref<LaravelUser | null>(null)
 
-const newUser = ref<Omit<CompleteUser, 'id' | 'created_at' | 'updated_at'> & { password: string }>({
+const newUser = ref<Omit<LaravelUser, 'id' | 'created_at' | 'updated_at'> & { password: string }>({
   email: '',
-  first_name: '',
-  last_name: '',
-  role: 'operator',
+  name: '',
   phone: '',
-  actif: true,
+  department: '',
+  position: '',
+  roles: [],
   password: ''
 })
 
@@ -296,27 +291,27 @@ const loadUsers = async () => {
   }
 }
 
-const openModal = (user?: CompleteUser) => {
+const openModal = (user?: LaravelUser) => {
   if (user) {
     editingUser.value = user
     newUser.value = {
       email: user.email,
-      first_name: user.first_name,
-      last_name: user.last_name,
-      role: user.role,
+      name: user.name,
       phone: user.phone || '',
-      actif: user.actif,
+      department: user.department || '',
+      position: user.position || '',
+      roles: user.roles || [],
       password: ''
     }
   } else {
     editingUser.value = null
     newUser.value = {
       email: '',
-      first_name: '',
-      last_name: '',
-      role: 'operator',
+      name: '',
       phone: '',
-      actif: true,
+      department: '',
+      position: '',
+      roles: [],
       password: ''
     }
   }
@@ -358,7 +353,7 @@ const handleDeleteUser = async (id: string) => {
   if (confirm('Êtes-vous sûr de vouloir supprimer cet utilisateur ?')) {
     try {
       console.log('🗑️ [PersonnelView] Suppression de l\'utilisateur:', id)
-      await deleteUser(id)
+      await deleteUser(Number(id))
       await loadUsers()
       console.log('✅ [PersonnelView] Utilisateur supprimé')
     } catch (error) {

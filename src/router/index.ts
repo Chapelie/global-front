@@ -90,14 +90,14 @@ const router = createRouter({
 
 // Navigation guard pour vérifier l'authentification Laravel
 router.beforeEach(async (to, from, next) => {
-  const { isAuthenticated, isLoading, isInitialized } = useLaravelAuth()
+  const { isAuthenticated, isLoading } = useLaravelAuth()
   
-  // Attendre que l'authentification soit initialisée
-  if (!isInitialized.value || isLoading.value) {
-    // Attendre que l'auth soit initialisée
+  // Attendre que l'authentification soit chargée
+  if (isLoading.value) {
+    // Attendre que l'auth soit chargée
     await new Promise(resolve => {
       const checkAuth = () => {
-        if (isInitialized.value && !isLoading.value) {
+        if (!isLoading.value) {
           resolve(true)
         } else {
           setTimeout(checkAuth, 50)

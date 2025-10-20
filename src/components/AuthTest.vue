@@ -59,7 +59,7 @@ const testSignIn = async () => {
     success.value = ''
     
     // Test avec des identifiants de test
-    await signIn('test@example.com', 'password123')
+    await signIn({ email: 'test@example.com', password: 'password123' })
     success.value = 'Connexion réussie !'
   } catch (err: any) {
     error.value = err.message || 'Erreur de connexion'

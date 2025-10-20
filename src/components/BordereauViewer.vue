@@ -176,11 +176,11 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
-import { type CompleteLivraison } from '../services/completeHybridService'
+import { type LaravelLivraison } from '../services/laravelApiService'
 import { useLogo } from '../composables/useLogo'
 
 interface Props {
-  livraison: CompleteLivraison
+  livraison: LaravelLivraison
 }
 
 const props = defineProps<Props>()

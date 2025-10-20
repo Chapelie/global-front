@@ -159,13 +159,13 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, nextTick } from 'vue'
 import { useAuth } from '@/services/auth'
-import { useCompleteHybridService, type CompleteLivraison } from '@/services/completeHybridService'
+import { useLaravelApi, type LaravelLivraison } from '@/services/laravelApiService'
 import { useLogo } from '@/composables/useLogo'
 import html2canvas from 'html2canvas'
 import jsPDF from 'jspdf'
 
 const props = defineProps<{
-  livraison: CompleteLivraison
+  livraison: LaravelLivraison
 }>()
 
 const emit = defineEmits<{
@@ -174,7 +174,7 @@ const emit = defineEmits<{
 }>()
 
 const { user: currentUser } = useAuth()
-const { addDocument } = useCompleteHybridService()
+const { addDocument } = useLaravelApi()
 const { logo, getLogoAlt, getLogoClass } = useLogo()
 
 // Refs

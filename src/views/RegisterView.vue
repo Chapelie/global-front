@@ -127,19 +127,23 @@
 
           <!-- Informations de contact -->
           <div class="space-y-4">
-            <h3 class="text-lg font-medium text-gray-900">Informations de contact (optionnel)</h3>
+            <h3 class="text-lg font-medium text-gray-900">Informations de contact</h3>
             
             <div>
               <label for="phone" class="block text-sm font-medium text-gray-700">
-                Téléphone
+                Téléphone *
               </label>
               <input
                 id="phone"
                 v-model="form.phone"
                 type="tel"
+                required
                 class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                 placeholder="+33 6 12 34 56 78"
               />
+              <p class="mt-1 text-xs text-gray-500">
+                Le téléphone servira pour la connexion
+              </p>
             </div>
 
           </div>
@@ -290,6 +294,7 @@ const handleRegister = async () => {
       email: form.value.email,
       password: form.value.password,
       password_confirmation: form.value.confirmPassword,
+      phone: form.value.phone,
       role: form.value.role as any
     })
     

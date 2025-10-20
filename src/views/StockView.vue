@@ -14,35 +14,26 @@ import {
   ClockIcon,
   CurrencyDollarIcon
 } from '@heroicons/vue/24/outline'
-import { useCompleteLaravelService, type CompleteArticle } from '../services/completeLaravelService'
+import { useLaravelApi, type LaravelArticle } from '../services/laravelApiService'
 // import SyncStatus from '../components/SyncStatus.vue'
 
-const articles = ref<CompleteArticle[]>([])
-const { getArticles, addArticle, updateArticle, deleteArticle } = useCompleteLaravelService()
+const articles = ref<LaravelArticle[]>([])
+const { getArticles, addArticle, updateArticle, deleteArticle,  } = useLaravelApi()
 
 const showModal = ref(false)
-const editingArticle = ref<CompleteArticle | null>(null)
-const selectedCategorie = ref('')
+const editingArticle = ref<LaravelArticle | null>(null)
 const searchTerm = ref('')
 // const syncStatus = ref(getSyncStatus())
 
 const newArticle = ref({
   nom: '',
-  categorie: '',
   stock: 0,
-  seuilCritique: 0,
+  seuil_critique: 0,
   unite: '',
   prix: 0,
   notes: ''
 })
 
-const categories = [
-  'Briques',
-  'Matériaux',
-  'Emballage',
-  'Outillage',
-  'Consommables'
-]
 
 const unites = [
   'pièces',
@@ -57,10 +48,7 @@ const unites = [
 const articlesFiltres = computed(() => {
   let filtered = articles.value
   
-  if (selectedCategorie.value) {
-    filtered = filtered.filter(a => a.categorie === selectedCategorie.value)
-  }
-  
+ 
   if (searchTerm.value) {
     filtered = filtered.filter(a => 
       a.nom.toLowerCase().includes(searchTerm.value.toLowerCase())
@@ -71,14 +59,16 @@ const articlesFiltres = computed(() => {
 })
 
 const articlesCritiques = computed(() => {
-  return articles.value.filter(a => a.stock <= a.seuilCritique)
+  if (!Array.isArray(articles.value)) return []
+  return articles.value.filter(a => a.stock <= a.seuil_critique)
 })
 
 const valeurStock = computed(() => {
+  if (!Array.isArray(articles.value)) return 0
   return articles.value.reduce((sum, a) => sum + (a.stock * a.prix), 0)
 })
 
-const openModal = (article?: CompleteArticle) => {
+const openModal = (article?: LaravelArticle) => {
   if (article) {
     editingArticle.value = article
     newArticle.value = { 
@@ -89,9 +79,8 @@ const openModal = (article?: CompleteArticle) => {
     editingArticle.value = null
     newArticle.value = {
       nom: '',
-      categorie: '',
       stock: 0,
-      seuilCritique: 0,
+      seuil_critique: 0,
       unite: '',
       prix: 0,
       notes: ''
@@ -103,11 +92,10 @@ const openModal = (article?: CompleteArticle) => {
 const saveArticle = async () => {
   try {
     if (editingArticle.value) {
-      await updateArticle(editingArticle.value.id!, {
+      await updateArticle(editingArticle.value.id, {
         nom: newArticle.value.nom,
-        categorie: newArticle.value.categorie,
         stock: newArticle.value.stock,
-        seuilCritique: newArticle.value.seuilCritique,
+        seuil_critique: newArticle.value.seuil_critique,
         unite: newArticle.value.unite,
         prix: newArticle.value.prix,
         notes: newArticle.value.notes
@@ -115,17 +103,16 @@ const saveArticle = async () => {
     } else {
       await addArticle({
         nom: newArticle.value.nom,
-        categorie: newArticle.value.categorie,
         stock: newArticle.value.stock,
-        seuilCritique: newArticle.value.seuilCritique,
+        seuil_critique: newArticle.value.seuil_critique,
         unite: newArticle.value.unite,
         prix: newArticle.value.prix,
         notes: newArticle.value.notes,
-        typeProduction: 'autre',
-        capaciteProduction: 0,
-        uniteProduction: 'unités/jour',
-        coutProduction: 0,
-        tempsProduction: 0,
+        type_production: 'autre',
+        capacite_production: 0,
+        unite_production: 'unités/jour',
+        cout_production: 0,
+        temps_production: 0,
         qualite: 'standard',
         actif: true
       })
@@ -142,7 +129,7 @@ const saveArticle = async () => {
 const handleDeleteArticle = async (id: string) => {
   if (confirm('Êtes-vous sûr de vouloir supprimer cet article ?')) {
     try {
-      await deleteArticle(id)
+      await deleteArticle(Number(id))
       await loadArticles()
     } catch (error) {
       console.error('Erreur lors de la suppression:', error)
@@ -151,7 +138,7 @@ const handleDeleteArticle = async (id: string) => {
   }
 }
 
-const ajusterStock = async (article: CompleteArticle, quantite: number) => {
+const ajusterStock = async (article: any, quantite: number) => {
   try {
     const newStock = Math.max(0, article.stock + quantite)
     await updateArticle(article.id!, { stock: newStock })
@@ -162,26 +149,36 @@ const ajusterStock = async (article: CompleteArticle, quantite: number) => {
   }
 }
 
-const getStockStatus = (article: CompleteArticle) => {
-  const ratio = article.stock / article.seuilCritique
+const getStockStatus = (article: LaravelArticle) => {
+  const ratio = article.stock / article.seuil_critique
   if (ratio <= 1) return { color: 'text-red-600', bg: 'bg-red-100', text: 'Critique' }
   if (ratio <= 2) return { color: 'text-yellow-600', bg: 'bg-yellow-100', text: 'Faible' }
   return { color: 'text-green-600', bg: 'bg-green-100', text: 'Normal' }
 }
 
-const getStockBarColor = (article: CompleteArticle) => {
-  const ratio = article.stock / article.seuilCritique
+const getStockBarColor = (article: any) => {
+  const ratio = article.stock / article.seuil_critique
   if (ratio <= 1) return 'bg-red-500'
   if (ratio <= 2) return 'bg-yellow-500'
   return 'bg-green-500'
 }
 
 const loadArticles = async () => {
-  articles.value = await getArticles()
+  try {
+    const data = await getArticles()
+    articles.value = Array.isArray(data) ? data : []
+  } catch (error) {
+    console.error('Erreur lors du chargement des articles:', error)
+    articles.value = []
+  }
 }
 
-onMounted(() => {
-  loadArticles()
+
+
+onMounted(async () => {
+  await Promise.all([
+    loadArticles(),
+  ])
 })
 </script>
 
@@ -277,22 +274,7 @@ onMounted(() => {
         </div>
       </div>
 
-      <div class="bg-white rounded-3xl shadow-lg hover:shadow-xl transition-all duration-300 p-6 border border-gray-100 group hover:border-orange-200">
-        <div class="flex items-center justify-between">
-          <div>
-            <div class="h-14 w-14 rounded-2xl bg-gradient-to-br from-orange-500 to-orange-600 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform duration-200">
-              <EyeIcon class="h-7 w-7 text-white" />
-            </div>
-            <p class="text-sm font-semibold text-gray-600 uppercase tracking-wide">Catégories</p>
-            <p class="text-3xl font-bold text-gray-900 mt-1">{{ new Set(articles.map(a => a.categorie)).size }}</p>
-          </div>
-          <div class="text-right">
-            <div class="h-2 w-16 bg-orange-200 rounded-full overflow-hidden">
-              <div class="h-full bg-gradient-to-r from-orange-500 to-orange-600 rounded-full" style="width: 60%"></div>
-            </div>
-          </div>
-        </div>
-      </div>
+      
     </div>
 
     <!-- Alertes stock critique améliorées -->
@@ -321,7 +303,6 @@ onMounted(() => {
           <div class="flex items-center justify-between mb-4">
             <div>
               <h4 class="font-bold text-gray-900 text-lg">{{ article.nom }}</h4>
-              <p class="text-sm text-gray-600">{{ article.categorie }}</p>
             </div>
             <div class="text-right">
               <span class="text-2xl font-bold text-red-600">{{ article.stock }}</span>
@@ -331,20 +312,19 @@ onMounted(() => {
           <div class="mb-3">
             <div class="flex justify-between text-sm mb-1">
               <span class="text-gray-600">Seuil critique</span>
-              <span class="font-medium">{{ article.seuilCritique }} {{ article.unite }}</span>
+              <span class="font-medium">{{ article.seuil_critique }} {{ article.unite }}</span>
             </div>
             <div class="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
               <div
                 class="h-3 bg-gradient-to-r from-red-500 to-red-600 rounded-full transition-all duration-500"
-                :style="{ width: `${Math.min((article.stock / article.seuilCritique) * 100, 100)}%` }"
+                :style="{ width: `${Math.min((article.stock / article.seuil_critique) * 100, 100)}%` }"
               ></div>
             </div>
             <p class="text-xs text-red-600 mt-1 font-medium">
-              {{ Math.round((article.stock / article.seuilCritique) * 100) }}% du seuil critique
+              {{ Math.round((article.stock / article.seuil_critique) * 100) }}% du seuil critique
             </p>
           </div>
           <div class="flex justify-between items-center">
-            <span class="text-xs text-gray-500">{{ article.fournisseur }}</span>
             <div class="flex space-x-1">
               <button
                 @click="ajusterStock(article, 10)"
@@ -383,34 +363,11 @@ onMounted(() => {
               class="w-full sm:w-64 pl-10 pr-4 py-3 rounded-2xl border border-gray-300 focus:border-orange-500 focus:ring-2 focus:ring-orange-200 transition-all duration-200"
             />
           </div>
-          <div class="relative w-full sm:w-auto">
-            <FunnelIcon class="h-5 w-5 text-gray-400 absolute left-3 top-1/2 transform -translate-y-1/2" />
-            <select
-              v-model="selectedCategorie"
-              class="w-full sm:w-48 pl-10 pr-8 py-3 rounded-2xl border border-gray-300 focus:border-orange-500 focus:ring-2 focus:ring-orange-200 transition-all duration-200 appearance-none bg-white"
-            >
-              <option value="">Toutes les catégories</option>
-              <option v-for="categorie in categories" :key="categorie" :value="categorie">
-                {{ categorie }}
-              </option>
-            </select>
-          </div>
+          
         </div>
       </div>
-      <div v-if="searchTerm || selectedCategorie" class="flex items-center space-x-2 mb-4">
-        <span class="text-sm text-gray-600">Filtres actifs:</span>
-        <span v-if="searchTerm" class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
-          "{{ searchTerm }}"
-          <button @click="searchTerm = ''" class="ml-1 text-orange-600 hover:text-orange-800">
-            ×
-          </button>
-        </span>
-        <span v-if="selectedCategorie" class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-          {{ selectedCategorie }}
-          <button @click="selectedCategorie = ''" class="ml-1 text-blue-600 hover:text-blue-800">
-            ×
-          </button>
-        </span>
+       
+       
       </div>
     </div>
 
@@ -433,7 +390,6 @@ onMounted(() => {
                 {{ getStockStatus(article).text }}
               </span>
             </div>
-            <p class="text-sm font-medium text-gray-600 uppercase tracking-wide">{{ article.categorie }}</p>
           </div>
           <div class="flex items-center space-x-2">
             <div class="flex items-center space-x-1">
@@ -459,7 +415,7 @@ onMounted(() => {
                 <PencilIcon class="h-5 w-5" />
               </button>
               <button
-                @click="deleteArticle(article.id!)"
+                @click="deleteArticle(article.id)"
                 class="h-10 w-10 rounded-xl bg-gray-100 hover:bg-red-100 text-gray-600 hover:text-red-600 flex items-center justify-center transition-all duration-200 hover:scale-110"
                 title="Supprimer"
               >
@@ -486,7 +442,7 @@ onMounted(() => {
         <div class="grid grid-cols-2 gap-6 mb-6">
           <div>
             <p class="text-sm font-semibold text-gray-600 mb-1">Seuil critique</p>
-            <p class="text-base font-bold text-gray-900">{{ article.seuilCritique.toLocaleString() }} {{ article.unite }}</p>
+            <p class="text-base font-bold text-gray-900">{{ article.seuil_critique.toLocaleString() }} {{ article.unite }}</p>
           </div>
           <div>
             <p class="text-sm font-semibold text-gray-600 mb-1">Valeur stock</p>
@@ -498,13 +454,13 @@ onMounted(() => {
         <div class="mb-6">
           <div class="flex items-center justify-between mb-2">
             <span class="text-sm font-semibold text-gray-700">Niveau de stock</span>
-            <span class="text-sm font-bold text-gray-900">{{ Math.round((article.stock / article.seuilCritique) * 100) }}%</span>
+            <span class="text-sm font-bold text-gray-900">{{ Math.round((article.stock / article.seuil_critique) * 100) }}%</span>
           </div>
           <div class="w-full bg-gray-200 rounded-full h-3 overflow-hidden shadow-inner">
             <div
               class="h-3 rounded-full transition-all duration-500"
               :class="getStockBarColor(article)"
-              :style="{ width: `${Math.min((article.stock / article.seuilCritique) * 100, 100)}%` }"
+              :style="{ width: `${Math.min((article.stock / article.seuil_critique) * 100, 100)}%` }"
             ></div>
           </div>
         </div>
@@ -513,7 +469,7 @@ onMounted(() => {
         <div class="border-t border-gray-200 pt-4">
           <div class="flex items-center justify-between text-sm">
             <span class="text-gray-600 font-medium">Dernière MAJ:</span>
-            <span class="font-semibold text-gray-700">{{ new Date(article.derniereMiseAJour || new Date()).toLocaleDateString('fr-FR') }}</span>
+            <span class="font-semibold text-gray-700">{{ new Date(article.derniere_mise_a_jour || new Date()).toLocaleDateString('fr-FR') }}</span>
           </div>
           <div v-if="article.notes" class="mt-3 p-3 bg-gray-50 rounded-xl">
             <p class="text-sm text-gray-700 italic">{{ article.notes }}</p>
@@ -563,17 +519,7 @@ onMounted(() => {
                   />
                 </div>
                 <div>
-                  <label class="block text-sm font-semibold text-gray-700 mb-2">Catégorie *</label>
-                  <select
-                    v-model="newArticle.categorie"
-                    required
-                    class="w-full rounded-xl border-gray-300 focus:border-orange-500 focus:ring-2 focus:ring-orange-200 transition-all duration-200 px-4 py-3"
-                  >
-                    <option value="">Sélectionner une catégorie</option>
-                    <option v-for="categorie in categories" :key="categorie" :value="categorie">
-                      {{ categorie }}
-                    </option>
-                  </select>
+                 
                 </div>
               </div>
             </div>
@@ -596,7 +542,7 @@ onMounted(() => {
                 <div>
                   <label class="block text-sm font-semibold text-gray-700 mb-2">Seuil critique *</label>
                   <input
-                    v-model.number="newArticle.seuilCritique"
+                    v-model.number="newArticle.seuil_critique"
                     type="number"
                     required
                     min="0"
@@ -688,24 +634,6 @@ onMounted(() => {
         </button>
       </div>
     </div>
-
-    <!-- Message si aucun résultat de recherche -->
-    <div v-else-if="articlesFiltres.length === 0" class="text-center py-16">
-      <div class="max-w-md mx-auto">
-        <div class="h-24 w-24 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-6">
-          <MagnifyingGlassIcon class="h-12 w-12 text-gray-400" />
-        </div>
-        <h3 class="text-xl font-semibold text-gray-900 mb-2">Aucun résultat trouvé</h3>
-        <p class="text-gray-600 mb-6">Essayez de modifier vos critères de recherche.</p>
-        <button
-          @click="searchTerm = ''; selectedCategorie = ''"
-          class="inline-flex items-center px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium rounded-xl transition-colors"
-        >
-          Réinitialiser les filtres
-        </button>
-      </div>
-    </div>
-  </div>
 </template>
 
 <style scoped>

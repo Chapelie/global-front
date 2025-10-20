@@ -9,6 +9,7 @@ import { useLaravelApi, type LaravelUser } from './laravelApiService'
 interface LoginCredentials {
   email: string
   password: string
+  phone?: string
 }
 
 interface RegisterData {
@@ -17,6 +18,7 @@ interface RegisterData {
   password: string
   password_confirmation: string
   role?: string
+  phone?: string
 }
 
 interface AuthResponse {
@@ -38,8 +40,9 @@ interface PasswordReset {
 
 class LaravelAuthService {
   private api = useLaravelApi()
-  private user = ref<LaravelUser | null>(null)
+  public user = ref<LaravelUser | null>(null)
   private loading = ref(false)
+  private _isInitialized = ref(false)
 
   constructor() {
     this.loadUserFromStorage()
@@ -59,7 +62,7 @@ class LaravelAuthService {
   }
 
   get userRole() {
-    return computed(() => this.user.value?.role || 'guest')
+    return computed(() => this.user.value?.roles?.[0]?.name || 'operator')
   }
 
   get isAdmin() {
@@ -72,6 +75,18 @@ class LaravelAuthService {
 
   get isOperator() {
     return computed(() => ['operator', 'manager', 'admin', 'super_admin'].includes(this.userRole.value))
+  }
+
+  get isInitialized() {
+    return computed(() => this._isInitialized.value)
+  }
+
+  get user_metadata() {
+    return computed(() => this.user.value)
+  }
+
+  get session() {
+    return computed(() => ({ success: true, user: this.user.value }))
   }
 
   // Charger l'utilisateur depuis le localStorage
@@ -106,11 +121,11 @@ class LaravelAuthService {
   }
 
   // Connexion
-  async signIn(credentials: LoginCredentials): Promise<{ success: boolean; error?: string; user?: LaravelUser }> {
+  signIn = async (credentials: LoginCredentials): Promise<{ success: boolean; error?: string; user?: LaravelUser }> => {
     this.loading.value = true
     
     try {
-      const response = await fetch('http://localhost:8000/api/auth/login', {
+      const response = await fetch('http://localhost:8000/api/login', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -148,7 +163,7 @@ class LaravelAuthService {
     this.loading.value = true
     
     try {
-      const response = await fetch('http://localhost:8000/api/auth/register', {
+      const response = await fetch('http://localhost:8000/api/register', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -182,12 +197,12 @@ class LaravelAuthService {
   }
 
   // Déconnexion
-  async signOut(): Promise<void> {
+  signOut = async (): Promise<void> => {
     this.loading.value = true
     
     try {
       // Appeler l'endpoint de déconnexion du backend
-      await fetch('http://localhost:8000/api/auth/logout', {
+      await fetch('http://localhost:8000/api/logout', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${this.api.isAuthenticated.value ? localStorage.getItem('token') : ''}`,
@@ -204,13 +219,13 @@ class LaravelAuthService {
   }
 
   // Obtenir la session actuelle
-  async getSession(): Promise<LaravelUser | null> {
+  getSession = async (): Promise<LaravelUser | null> => {
     if (!this.api.isAuthenticated.value) {
       return null
     }
 
     try {
-      const response = await fetch('http://localhost:8000/api/auth/me', {
+      const response = await fetch('http://localhost:8000/api/user', {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`,
           'Accept': 'application/json'
@@ -238,7 +253,7 @@ class LaravelAuthService {
     this.loading.value = true
     
     try {
-      const response = await fetch('http://localhost:8000/api/auth/forgot-password', {
+      const response = await fetch('http://localhost:8000/api/forgot-password', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -270,7 +285,7 @@ class LaravelAuthService {
     this.loading.value = true
     
     try {
-      const response = await fetch('http://localhost:8000/api/auth/update-password', {
+      const response = await fetch('http://localhost:8000/api/update-password', {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`,
@@ -303,7 +318,7 @@ class LaravelAuthService {
     this.loading.value = true
     
     try {
-      const response = await fetch('http://localhost:8000/api/auth/profile', {
+      const response = await fetch('http://localhost:8000/api/profile', {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`,
@@ -339,7 +354,7 @@ class LaravelAuthService {
     this.loading.value = true
     
     try {
-      const response = await fetch(`http://localhost:8000/api/auth/users/${userId}/role`, {
+      const response = await fetch(`http://localhost:8000/api/users/${userId}/role`, {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`,
@@ -372,7 +387,7 @@ class LaravelAuthService {
     this.loading.value = true
     
     try {
-      const response = await fetch('http://localhost:8000/api/auth/users', {
+      const response = await fetch('http://localhost:8000/api/users', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`,
@@ -430,11 +445,10 @@ class LaravelAuthService {
   hasPermission(permission: string): boolean {
     if (!this.user.value) return false
     
-    const userRole = this.user.value.role
+    const userRole = this.user.value.roles?.[0]?.name || 'operator'
     
     // Logique des permissions basée sur les rôles
     const permissions = {
-      'guest': [],
       'operator': ['read_articles', 'read_consommables', 'read_commandes', 'read_livraisons', 'read_productions'],
       'manager': ['read_articles', 'write_articles', 'read_consommables', 'write_consommables', 'read_commandes', 'write_commandes', 'read_livraisons', 'write_livraisons', 'read_productions', 'write_productions'],
       'admin': ['*'], // Toutes les permissions
@@ -466,10 +480,35 @@ class LaravelAuthService {
   }
 
   // Initialiser le service
-  async init(): Promise<void> {
+  init = async (): Promise<void> => {
     if (this.api.isAuthenticated.value) {
       await this.getSession()
     }
+    this._isInitialized.value = true
+  }
+
+  // Méthodes manquantes pour compatibilité
+  initAuth = async (): Promise<void> => {
+    return this.init()
+  }
+
+  addDocument = async (data: any): Promise<any> => {
+    // Implémentation temporaire - à adapter selon les besoins
+    console.warn('addDocument not implemented in LaravelAuthService')
+    return null
+  }
+
+  getAllUsers = async (): Promise<LaravelUser[]> => {
+    const result = await this.getUsers()
+    return result.users || []
+  }
+
+  updateUserProfile = async (userId: number, data: Partial<LaravelUser>): Promise<{ success: boolean; error?: string }> => {
+    return this.updateProfile(data)
+  }
+
+  hasRole = (role: string): boolean => {
+    return this.userRole.value === role
   }
 }
 

@@ -1,17 +1,14 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { storageService } from '../services/storage'
-import { useCompleteLaravelService, type CompleteArticle, type CompleteProduction, type CompleteLivraison, type CompleteCommande } from '@/services/completeLaravelService'
+import { useLaravelApi } from '@/services/laravelApiService'
 
 // Service Laravel
 const {
   getArticles,
   getProductions,
   getLivraisons,
-  getCommandes,
-  getStockInfo,
-  getProductionsDuJour
-} = useCompleteLaravelService()
+  getCommandes
+} = useLaravelApi()
 
 import {
   CubeIcon,
@@ -22,11 +19,6 @@ import {
   ArrowDownIcon,
   ChartBarIcon,
   ShoppingCartIcon,
-  ClockIcon,
-  CheckCircleIcon,
-  CalendarIcon,
-  UserGroupIcon,
-  BuildingStorefrontIcon,
   Cog6ToothIcon,
   EyeIcon
 } from '@heroicons/vue/24/outline'
@@ -34,10 +26,10 @@ import BarChart from '../components/charts/BarChart.vue'
 
 // Variables réactives pour les données Laravel
 const laravelData = ref({
-  articles: [] as CompleteArticle[],
-  productions: [] as CompleteProduction[],
-  livraisons: [] as CompleteLivraison[],
-  commandes: [] as CompleteCommande[],
+  articles: [] as any[],
+  productions: [] as any[],
+  livraisons: [] as any[],
+  commandes: [] as any[],
   stockInfo: {} as any,
   productionsDuJour: {} as any,
   livraisonsRecentes: {} as any,
@@ -59,16 +51,12 @@ const loadLaravelData = async () => {
       articles,
       productions,
       livraisons,
-      commandes,
-      stockInfo,
-      productionsDuJour
+      commandes
     ] = await Promise.all([
       getArticles(),
       getProductions(),
       getLivraisons(),
-      getCommandes(),
-      getStockInfo(),
-      getProductionsDuJour()
+      getCommandes()
     ])
     
     // Calculer les livraisons récentes
@@ -108,8 +96,8 @@ const loadLaravelData = async () => {
       productions,
       livraisons,
       commandes,
-      stockInfo,
-      productionsDuJour,
+      stockInfo: {},
+      productionsDuJour: {},
       livraisonsRecentes,
       productionParSemaine
     }
@@ -201,13 +189,13 @@ const kpiData = computed(() => {
 
 // Données pour les graphiques
 const productionData = computed(() => {
-  const productions = storageService.getProductions()
+  const productions = laravelData.value.productions
   const last7Days = Array.from({ length: 7 }, (_, i) => {
     const date = new Date()
     date.setDate(date.getDate() - i)
     return date.toISOString().split('T')[0]
   }).reverse()
-  
+
   return last7Days.map(date => {
     const dayProductions = productions.filter((p: any) => p.date === date && p.statut === 'termine')
     return {
@@ -224,7 +212,7 @@ const productionData = computed(() => {
 })
 
 const stockData = computed(() => {
-  const stock = storageService.getStock()
+  const stock = laravelData.value.articles
   return stock.map((item: any) => ({
     article: item.nom,
     stock: item.stock,
@@ -234,15 +222,15 @@ const stockData = computed(() => {
 
 // Alertes
 const alertes = computed(() => {
-  const stock = storageService.getStock()
-  const livraisons = storageService.getLivraisons()
+  const stock = laravelData.value.articles
+  const livraisons = laravelData.value.livraisons
   const alertesList: Array<{
     id: string
     type: 'warning' | 'info'
     message: string
     time: string
   }> = []
-  
+
   // Alertes de stock critique
   stock.forEach((item: any) => {
     if (item.stock <= item.seuilCritique) {
@@ -254,7 +242,7 @@ const alertes = computed(() => {
       })
     }
   })
-  
+
   // Alertes de livraisons récentes
   const recentLivraisons = livraisons.filter((l: any) => l.statut === 'livre').slice(0, 2)
   recentLivraisons.forEach(livraison => {
@@ -265,7 +253,7 @@ const alertes = computed(() => {
       time: 'Récemment'
     })
   })
-  
+
   return alertesList
 })
 
@@ -287,7 +275,7 @@ const getTrendIcon = (trend: string) => {
 
 // Données détaillées pour les vues d'ensemble
 const productionOverview = computed(() => {
-  const productions = storageService.getProductions()
+  const productions = laravelData.value.productions
   const today = new Date().toISOString().split('T')[0]
 
   const productionsToday = productions.filter((p: any) => p.date === today)
@@ -304,7 +292,7 @@ const productionOverview = computed(() => {
 })
 
 const articlesOverview = computed(() => {
-  const stock = storageService.getStock()
+  const stock = laravelData.value.articles
   const totalArticles = stock.length
   const articlesActifs = stock.filter((a: any) => a.actif).length
   const articlesCritiques = stock.filter((a: any) => a.stock <= a.seuilCritique).length
@@ -320,8 +308,8 @@ const articlesOverview = computed(() => {
 })
 
 const livraisonsOverview = computed(() => {
-  const livraisons = storageService.getLivraisons()
-  const commandes = storageService.getCommandes()
+  const livraisons = laravelData.value.livraisons
+  const commandes = laravelData.value.commandes
 
   const livraisonsEnAttente = livraisons.filter((l: any) => l.statut === 'en_attente').length
   const livraisonsEnCours = livraisons.filter((l: any) => l.statut === 'en_cours').length
@@ -794,7 +782,7 @@ onMounted(() => {
         </router-link>
         <router-link to="/livraison" class="action-item action-green">
           <TruckIcon class="action-icon" />
-          <span class="action-label">Nouvelle livraison</span>
+          <span class="action-label">Gérer livraisons</span>
         </router-link>
         <router-link to="/stock" class="action-item action-blue">
           <ArchiveBoxIcon class="action-icon" />

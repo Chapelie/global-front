@@ -83,7 +83,7 @@ const testLogin = async () => {
   addLog('info', `📧 Email: ${testEmail.value}`)
   
   try {
-    await signIn(testEmail.value, testPassword.value)
+    await signIn({ email: testEmail.value, password: testPassword.value })
     addLog('success', '✅ Connexion réussie !')
     success.value = 'Connexion réussie !'
   } catch (err: any) {

@@ -361,7 +361,7 @@ const saveUser = async () => {
     if (editingUser.value) {
       // Mise à jour
       console.log('👤 [UsersView] Mise à jour utilisateur:', editingUser.value.id)
-      await updateUserProfile({
+      await updateUserProfile(editingUser.value.id, {
         first_name: userForm.value.first_name,
         last_name: userForm.value.last_name,
         phone: userForm.value.phone,
@@ -386,7 +386,7 @@ const saveUser = async () => {
 const toggleUserStatus = async (user: any) => {
   try {
     console.log('👤 [UsersView] Changement statut utilisateur:', user.id)
-    await updateUserProfile({
+    await updateUserProfile(user.id, {
       // Note: Il faudrait ajouter un champ is_active dans updateUserProfile
     })
     await loadUsers()

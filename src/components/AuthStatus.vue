@@ -191,7 +191,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useAuth } from '../services/auth'
-import { useCompleteHybridService } from '../services/completeHybridService'
+import { useLaravelAuth } from '../services/laravelAuth'
 
 const { user, isAuthenticated, isLoading, signIn, signUp, signOut, initAuth } = useAuth()
 
@@ -252,7 +252,7 @@ const dataModeDescription = computed(() => {
 const handleSignIn = async () => {
   loading.value = true
   try {
-    await signIn(loginForm.value.email, loginForm.value.password)
+    await signIn({ email: loginForm.value.email, password: loginForm.value.password })
     showLogin.value = false
     loginForm.value = { email: '', password: '' }
   } catch (error: any) {
@@ -265,9 +265,11 @@ const handleSignIn = async () => {
 const handleSignUp = async () => {
   loading.value = true
   try {
-    await signUp(registerForm.value.email, registerForm.value.password, {
-      first_name: registerForm.value.firstName,
-      last_name: registerForm.value.lastName,
+    await signUp({
+      name: `${registerForm.value.firstName} ${registerForm.value.lastName}`,
+      email: registerForm.value.email,
+      password: registerForm.value.password,
+      password_confirmation: registerForm.value.password,
       role: 'secretaire'
     })
     showRegister.value = false

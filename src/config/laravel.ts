@@ -115,8 +115,8 @@ export const LARAVEL_CONFIG = {
   
   // Permissions par rôle
   PERMISSIONS: {
-    [this?.ROLES?.GUEST || 'guest']: [],
-    [this?.ROLES?.OPERATOR || 'operator']: [
+    guest: [],
+    operator: [
       'read_articles',
       'read_consommables',
       'read_commandes',
@@ -124,7 +124,7 @@ export const LARAVEL_CONFIG = {
       'read_productions',
       'update_stock'
     ],
-    [this?.ROLES?.MANAGER || 'manager']: [
+    manager: [
       'read_articles',
       'write_articles',
       'read_consommables',
@@ -137,8 +137,8 @@ export const LARAVEL_CONFIG = {
       'write_productions',
       'update_stock'
     ],
-    [this?.ROLES?.ADMIN || 'admin']: ['*'],
-    [this?.ROLES?.SUPER_ADMIN || 'super_admin']: ['*']
+    admin: ['*'],
+    super_admin: ['*']
   },
   
   // Configuration des messages d'erreur
@@ -217,7 +217,7 @@ export function buildAuthUrl(endpoint: string): string {
 
 // Fonction utilitaire pour obtenir les headers avec authentification
 export function getAuthHeaders(token?: string): Record<string, string> {
-  const headers = { ...LARAVEL_CONFIG.DEFAULT_HEADERS }
+  const headers: Record<string, string> = { ...LARAVEL_CONFIG.DEFAULT_HEADERS }
   
   if (token) {
     headers['Authorization'] = `Bearer ${token}`
@@ -235,11 +235,11 @@ export function hasPermission(userRole: string, permission: string): boolean {
   }
   
   // L'admin et super_admin ont toutes les permissions
-  if (rolePermissions.includes('*')) {
+  if (rolePermissions.includes('*' as never)) {
     return true
   }
   
-  return rolePermissions.includes(permission)
+  return rolePermissions.includes(permission as never)
 }
 
 // Fonction utilitaire pour obtenir le message d'erreur

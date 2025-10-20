@@ -1,24 +1,32 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
-import { useCompleteLaravelService, type CompleteLivraison, type CompleteCommande, type CompleteArticle } from '../services/completeLaravelService'
+import { ref, computed, onMounted, nextTick } from 'vue'
+import { useLaravelApi, type LaravelLivraison, type LaravelArticle } from '../services/laravelApiService'
+
+// Type étendu pour la livraison avec les propriétés supplémentaires utilisées dans la vue
+interface ExtendedLivraison extends LaravelLivraison {
+  cloturee?: boolean
+  dateCloture?: string
+  dateClotureManuelle?: string
+  notesCloture?: string
+  commandeId?: number
+}
 // LivraisonAvecSignature supprimé - plus nécessaire
 import BordereauViewer from '../components/BordereauViewer.vue'
 import BLGenerator from '../components/BLGenerator.vue'
 
 // Service Laravel
-const { getLivraisons, addLivraison, updateLivraison, deleteLivraison, getCommandes, updateCommande } = useCompleteLaravelService()
+const { getLivraisons, addLivraison, updateLivraison, deleteLivraison, getArticles } = useLaravelApi()
 
 // État réactif
-const livraisons = ref<CompleteLivraison[]>([])
-const commandes = ref<CompleteCommande[]>([])
+const livraisons = ref<ExtendedLivraison[]>([])
 const showModal = ref(false)
-// showSignatureModal supprimé - plus nécessaire
+const showCommencerModal = ref(false)
 const showBordereauModal = ref(false)
 const showBLGenerator = ref(false)
-const editingLivraison = ref<CompleteLivraison | null>(null)
-const selectedLivraison = ref<CompleteLivraison | null>(null)
-const selectedBordereauLivraison = ref<CompleteLivraison | null>(null)
-const selectedBLLivraison = ref<CompleteLivraison | null>(null)
+const editingLivraison = ref<LaravelLivraison | null>(null)
+const selectedLivraison = ref<LaravelLivraison | null>(null)
+const selectedBordereauLivraison = ref<LaravelLivraison | null>(null)
+const selectedBLLivraison = ref<LaravelLivraison | null>(null)
 const activeTab = ref<'nonTerminees' | 'terminees'>('nonTerminees')
 
 // Nouvelle livraison
@@ -29,8 +37,8 @@ const newLivraison = ref({
   produits: [{ nom: '', quantite: 0, unite: 'pièces', quantiteCommandee: 0, quantiteLivree: 0, difference: 0, resteAPayer: 0, notes: '' }],
   statut: 'en_attente' as 'en_attente' | 'en_cours' | 'livre' | 'annule',
   adresse: '',
-  numeroBl: '',
-  codeSuivi: '',
+  numero_bl: '',
+  code_suivi: '',
   date: new Date().toISOString(),
   totalCommande: 0,
   totalLivraison: 0,
@@ -38,19 +46,22 @@ const newLivraison = ref({
   resteAPayerTotal: 0
 })
 
+// Variables pour le processus de livraison
+const quantitesLivraison = ref<{[key: string]: number}>({})
+const signatureClient = ref('')
+const observationsLivraison = ref('')
+const signaturePad = ref<any>(null)
+
 // Computed
 const totalLivraisons = computed(() => livraisons.value.length)
 const livraisonsEnAttente = computed(() => livraisons.value.filter(l => l.statut === 'en_attente').length)
 const livraisonsEnCours = computed(() => livraisons.value.filter(l => l.statut === 'en_cours').length)
 const livraisonsLivre = computed(() => livraisons.value.filter(l => l.statut === 'livre').length)
 
-// Computed pour les commandes prêtes pour livraison (commandes confirmées et préparées)
-const commandesALivrer = computed(() => {
-  return commandes.value.filter(c => c.statut === 'confirmee' || c.statut === 'en_preparation')
-})
+// Les livraisons sont maintenant créées automatiquement lors de la confirmation des commandes
 
 // Computed pour vérifier si une livraison est complètement livrée
-const isLivraisonComplete = (livraison: CompleteLivraison) => {
+const isLivraisonComplete = (livraison: ExtendedLivraison) => {
   return livraison.produits.every(produit => {
     const quantiteCommandee = produit.quantiteCommandee || produit.quantite || 0
     const quantiteLivree = produit.quantiteLivree || 0
@@ -82,11 +93,11 @@ const livraisonsTerminees = computed(() => {
 })
 
 // Computed pour les produits disponibles avec stock
-const produitsDisponibles = ref<CompleteArticle[]>([])
+const produitsDisponibles = ref<LaravelArticle[]>([])
 
 const loadProduitsDisponibles = async () => {
   try {
-    const { getArticles } = useCompleteLaravelService()
+    const { getArticles } = useLaravelApi()
     const articles = await getArticles()
     produitsDisponibles.value = articles.filter(article => article.stock > 0)
   } catch (error) {
@@ -106,82 +117,32 @@ const loadLivraisons = async () => {
   }
 }
 
-const loadCommandes = async () => {
-  try {
-    console.log('🔍 [LivraisonView] Chargement des commandes depuis Laravel')
-    commandes.value = await getCommandes()
-    console.log('✅ [LivraisonView] Commandes chargées:', commandes.value.length)
-    
-    // Afficher les commandes confirmées et préparées pour livraison
-    const commandesPretes = commandes.value.filter(c => c.statut === 'confirmee' || c.statut === 'en_preparation')
-    console.log('📦 [LivraisonView] Commandes confirmées et préparées pour livraison:', commandesPretes.length)
-  } catch (error) {
-    console.error('❌ [LivraisonView] Erreur lors du chargement des commandes:', error)
-  }
-}
 
-const creerLivraisonDepuisCommande = async (commande: CompleteCommande) => {
-  try {
-    console.log('🔍 [LivraisonView] Création de livraison pour commande:', commande.numeroCommande)
-    
-    // Créer la livraison à partir de la commande
-    const livraisonData = {
-      numeroBl: `BL-${Date.now()}`,
-      date: new Date().toISOString().split('T')[0],
-      client: commande.client,
-      telephone: commande.telephone,
-      chauffeur: '',
-      produits: commande.produits.map(p => ({
+
+const openModal = (livraison?: ExtendedLivraison) => {
+  if (livraison) {
+    editingLivraison.value = livraison
+    newLivraison.value = {
+      client: livraison.client,
+      telephone: livraison.telephone,
+      chauffeur: livraison.chauffeur,
+      statut: livraison.statut as 'en_attente' | 'en_cours' | 'livre' | 'annule',
+      adresse: livraison.adresse,
+      numero_bl: livraison.numero_bl,
+      code_suivi: livraison.code_suivi || '',
+      date: livraison.date,
+      totalCommande: livraison.total_commande || 0,
+      totalLivraison: livraison.total_livraison || 0,
+      differenceTotale: livraison.difference_totale || 0,
+      resteAPayerTotal: livraison.reste_a_payer_total || 0,
+      produits: livraison.produits.map(p => ({
         nom: p.nom,
         quantite: p.quantite,
         unite: p.unite,
-        quantiteCommandee: p.quantite,
-        quantiteLivree: 0,
-        difference: p.quantite,
-        resteAPayer: 0,
-        notes: ''
-      })),
-      statut: 'en_attente' as const,
-      adresse: commande.adresse,
-      codeSuivi: `CS-${Date.now()}`,
-      totalCommande: 0,
-      totalLivraison: 0,
-      differenceTotale: 0,
-      resteAPayerTotal: 0,
-      commandeId: commande.id
-    }
-
-    // Créer la livraison
-    console.log('🔍 [LivraisonView] Création de la livraison...')
-    const livraisonCreee = await addLivraison(livraisonData)
-    console.log('✅ [LivraisonView] Livraison créée:', livraisonCreee)
-    
-    // Mettre à jour le statut de la commande vers "livree"
-    console.log('🔍 [LivraisonView] Mise à jour du statut de la commande...')
-    await updateCommande(commande.id!, { statut: 'livree' })
-    console.log('✅ [LivraisonView] Commande mise à jour vers "livree"')
-    
-    // Recharger les données
-    console.log('🔍 [LivraisonView] Rechargement des données...')
-    await loadLivraisons()
-    await loadCommandes()
-    
-    console.log('✅ [LivraisonView] Livraison créée et commande mise à jour')
-    alert(`Livraison créée pour la commande ${commande.numeroCommande}. La commande est maintenant livrée.`)
-  } catch (error) {
-    console.error('❌ [LivraisonView] Erreur lors de la création de la livraison:', error)
-    alert('Erreur lors de la création de la livraison')
-  }
-}
-
-const openModal = (livraison?: CompleteLivraison) => {
-  if (livraison) {
-    editingLivraison.value = livraison
-    newLivraison.value = { 
-      ...livraison, 
-      numeroBl: livraison.numeroBl,
-      produits: livraison.produits.map(p => ({
-        ...p,
+        quantiteCommandee: p.quantiteCommandee || p.quantite_commandee || p.quantite,
+        quantiteLivree: p.quantiteLivree || p.quantite_livree || 0,
+        difference: p.difference || 0,
+        resteAPayer: p.resteAPayer || p.reste_a_payer || 0,
         notes: (p as any).notes || ''
       }))
     }
@@ -194,8 +155,8 @@ const openModal = (livraison?: CompleteLivraison) => {
       produits: [{ nom: '', quantite: 0, unite: 'pièces', quantiteCommandee: 0, quantiteLivree: 0, difference: 0, resteAPayer: 0, notes: '' }],
       statut: 'en_attente' as 'en_attente' | 'en_cours' | 'livre' | 'annule',
       adresse: '',
-      numeroBl: '',
-      codeSuivi: '',
+      numero_bl: '',
+      code_suivi: '',
       date: new Date().toISOString(),
       totalCommande: 0,
       totalLivraison: 0,
@@ -221,11 +182,23 @@ const removeProduit = (index: number) => {
 
 const saveLivraison = async () => {
   try {
+    // Convertir les produits au format attendu par l'API
+    const livraisonData = {
+      ...newLivraison.value,
+      produits: newLivraison.value.produits.map(produit => ({
+        ...produit,
+        quantite_commandee: produit.quantiteCommandee || produit.quantite,
+        quantite_livree: produit.quantiteLivree || 0,
+        reste_a_payer: produit.resteAPayer || 0,
+        notes: produit.notes || ''
+      }))
+    }
+
     if (editingLivraison.value) {
-      await updateLivraison(editingLivraison.value.id!, newLivraison.value)
+      await updateLivraison(editingLivraison.value.id!, livraisonData)
       console.log('✅ [LivraisonView] Livraison mise à jour')
     } else {
-      await addLivraison(newLivraison.value)
+      await addLivraison(livraisonData)
       console.log('✅ [LivraisonView] Livraison créée')
     }
     
@@ -238,10 +211,10 @@ const saveLivraison = async () => {
   }
 }
 
-const commencerLivraison = async (livraison: CompleteLivraison) => {
+const commencerLivraison = async (livraison: ExtendedLivraison) => {
   try {
     // Récupérer les articles depuis le service Laravel
-    const { getArticles } = useCompleteLaravelService()
+    const { getArticles } = useLaravelApi()
     const stock = await getArticles()
     const produitsIndisponibles: string[] = []
 
@@ -267,7 +240,13 @@ const commencerLivraison = async (livraison: CompleteLivraison) => {
     }
 
     selectedLivraison.value = livraison
-    // showSignatureModal supprimé - plus nécessaire
+    initialiserQuantitesLivraison(livraison)
+    showCommencerModal.value = true
+
+    // Initialiser la signature pad après que le modal soit affiché
+    nextTick(() => {
+      initialiserSignaturePad()
+    })
   } catch (error) {
     console.error('❌ [LivraisonView] Erreur lors de la vérification du stock:', error)
     alert('Erreur lors de la vérification du stock')
@@ -277,7 +256,7 @@ const commencerLivraison = async (livraison: CompleteLivraison) => {
 // Méthodes de signature supprimées - plus nécessaires
 
 // Nouvelle méthode pour clôturer manuellement une livraison
-const cloturerLivraison = async (livraison: CompleteLivraison) => {
+const cloturerLivraison = async (livraison: ExtendedLivraison) => {
   const produitsNonLivres = livraison.produits.filter(produit => {
     const quantiteCommandee = produit.quantiteCommandee || produit.quantite || 0
     const quantiteLivree = produit.quantiteLivree || 0
@@ -300,7 +279,7 @@ const cloturerLivraison = async (livraison: CompleteLivraison) => {
 
   if (confirm('Êtes-vous sûr de vouloir clôturer cette livraison ?')) {
     try {
-      const { updateLivraison } = useCompleteLaravelService()
+      const { updateLivraison } = useLaravelApi()
       
       const livraisonMiseAJour = {
         ...livraison,
@@ -328,10 +307,10 @@ const cloturerLivraison = async (livraison: CompleteLivraison) => {
 }
 
 // Méthode pour rouvrir une livraison clôturée
-const rouvrirLivraison = async (livraison: CompleteLivraison) => {
+const rouvrirLivraison = async (livraison: ExtendedLivraison) => {
   if (confirm('Êtes-vous sûr de vouloir rouvrir cette livraison ?')) {
     try {
-      const { updateLivraison } = useCompleteLaravelService()
+      const { updateLivraison } = useLaravelApi()
       
       const livraisonMiseAJour = {
         ...livraison,
@@ -358,22 +337,17 @@ const rouvrirLivraison = async (livraison: CompleteLivraison) => {
   }
 }
 
-// Méthode pour récupérer les informations client depuis la commande
-const getClientInfoFromCommande = (livraison: CompleteLivraison) => {
-  if (!livraison.commandeId) return null
-  
-  const commande = commandes.value.find(c => c.id === livraison.commandeId)
-  if (!commande) return null
-  
+// Méthode pour récupérer les informations client depuis la livraison directement
+const getClientInfoFromCommande = (livraison: ExtendedLivraison) => {
   return {
-    nom: commande.client,
-    telephone: commande.telephone,
-    adresse: commande.adresse
+    nom: livraison.client,
+    telephone: livraison.telephone,
+    adresse: livraison.adresse
   }
 }
 
 // Méthode pour calculer le pourcentage de livraison
-const getPourcentageLivraison = (livraison: CompleteLivraison) => {
+const getPourcentageLivraison = (livraison: ExtendedLivraison) => {
   if (!livraison.produits.length) return 0
 
   const totalCommandee = livraison.produits.reduce((sum, produit) => {
@@ -387,7 +361,7 @@ const getPourcentageLivraison = (livraison: CompleteLivraison) => {
   return totalCommandee > 0 ? Math.round((totalLivree / totalCommandee) * 100) : 0
 }
 
-const telechargerBL = (livraison: CompleteLivraison) => {
+const telechargerBL = (livraison: ExtendedLivraison) => {
   // Récupérer les informations client depuis la commande
   const clientInfo = getClientInfoFromCommande(livraison)
   if (clientInfo) {
@@ -400,7 +374,7 @@ const telechargerBL = (livraison: CompleteLivraison) => {
   showBordereauModal.value = true
 }
 
-const telechargerBordereauTransfert = (livraison: CompleteLivraison) => {
+const telechargerBordereauTransfert = (livraison: ExtendedLivraison) => {
   // Ouvrir une nouvelle fenêtre pour imprimer le bordereau de transfert
   const printWindow = window.open('', '_blank')
   if (printWindow) {
@@ -408,7 +382,7 @@ const telechargerBordereauTransfert = (livraison: CompleteLivraison) => {
       <!DOCTYPE html>
       <html>
         <head>
-          <title>Bordereau de Transfert - ${livraison.numeroBl}</title>
+          <title>Bordereau de Transfert - ${livraison.numero_bl}</title>
           <style>
             body { font-family: Arial, sans-serif; margin: 0; padding: 20px; }
             .transfert-bordereau { max-width: 800px; margin: 0 auto; }
@@ -449,8 +423,8 @@ const telechargerBordereauTransfert = (livraison: CompleteLivraison) => {
                 <h2 class="bordereau-title">BORDEREAU DE TRANSFERT</h2>
                 <div class="bordereau-details">
                   <p><strong>Date :</strong> ${new Date(livraison.date).toLocaleDateString('fr-FR', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
-                  <p><strong>N° Bordereau :</strong> ${livraison.numeroBl}</p>
-                  ${livraison.codeSuivi ? `<p><strong>Code de suivi :</strong> ${livraison.codeSuivi}</p>` : ''}
+                  <p><strong>N° Bordereau :</strong> ${livraison.numero_bl}</p>
+                  ${livraison.code_suivi ? `<p><strong>Code de suivi :</strong> ${livraison.code_suivi}</p>` : ''}
                 </div>
               </div>
             </div>
@@ -527,8 +501,251 @@ const closeBordereauModal = () => {
   selectedBordereauLivraison.value = null
 }
 
+const closeCommencerModal = () => {
+  showCommencerModal.value = false
+  selectedLivraison.value = null
+  // Réinitialiser les données de livraison
+  quantitesLivraison.value = {}
+  signatureClient.value = ''
+  observationsLivraison.value = ''
+}
 
-const getStatusText = (statut: string, livraison?: CompleteLivraison) => {
+// Initialiser les quantités pour la livraison
+const initialiserQuantitesLivraison = (livraison: ExtendedLivraison) => {
+  const quantites: {[key: string]: number} = {}
+  livraison.produits.forEach(produit => {
+    quantites[produit.nom] = produit.quantiteLivree || 0
+  })
+  quantitesLivraison.value = quantites
+}
+
+// Effacer la signature
+const effacerSignature = () => {
+  if (signaturePad.value) {
+    signaturePad.value.clear()
+  }
+  signatureClient.value = ''
+}
+
+// Initialiser la signature pad
+const initialiserSignaturePad = () => {
+  const canvas = signaturePad.value
+  if (canvas) {
+    // Créer un contexte simple pour dessiner
+    const ctx = canvas.getContext('2d')
+    if (ctx) {
+      let isDrawing = false
+      let lastX = 0
+      let lastY = 0
+
+      const startDrawing = (e: MouseEvent | TouchEvent) => {
+        isDrawing = true
+        const rect = canvas.getBoundingClientRect()
+        if (e instanceof MouseEvent) {
+          lastX = e.clientX - rect.left
+          lastY = e.clientY - rect.top
+        } else {
+          lastX = e.touches[0].clientX - rect.left
+          lastY = e.touches[0].clientY - rect.top
+        }
+      }
+
+      const draw = (e: MouseEvent | TouchEvent) => {
+        if (!isDrawing) return
+
+        const rect = canvas.getBoundingClientRect()
+        let currentX, currentY
+
+        if (e instanceof MouseEvent) {
+          currentX = e.clientX - rect.left
+          currentY = e.clientY - rect.top
+        } else {
+          currentX = e.touches[0].clientX - rect.left
+          currentY = e.touches[0].clientY - rect.top
+        }
+
+        ctx.beginPath()
+        ctx.moveTo(lastX, lastY)
+        ctx.lineTo(currentX, currentY)
+        ctx.strokeStyle = '#000'
+        ctx.lineWidth = 2
+        ctx.lineCap = 'round'
+        ctx.stroke()
+
+        lastX = currentX
+        lastY = currentY
+      }
+
+      const stopDrawing = () => {
+        isDrawing = false
+      }
+
+      // Events pour souris
+      canvas.addEventListener('mousedown', startDrawing)
+      canvas.addEventListener('mousemove', draw)
+      canvas.addEventListener('mouseup', stopDrawing)
+      canvas.addEventListener('mouseout', stopDrawing)
+
+      // Events pour touch
+      canvas.addEventListener('touchstart', (e: TouchEvent) => {
+        e.preventDefault()
+        startDrawing(e)
+      })
+      canvas.addEventListener('touchmove', (e: TouchEvent) => {
+        e.preventDefault()
+        draw(e)
+      })
+      canvas.addEventListener('touchend', (e: TouchEvent) => {
+        e.preventDefault()
+        stopDrawing()
+      })
+
+      // Méthodes pour le canvas
+      canvas.clear = () => {
+        ctx.clearRect(0, 0, canvas.width, canvas.height)
+      }
+
+      canvas.isEmpty = () => {
+        const pixelBuffer = new Uint32Array(
+          ctx.getImageData(0, 0, canvas.width, canvas.height).data.buffer
+        )
+        return !pixelBuffer.some(color => color !== 0)
+      }
+
+      // toDataURL est déjà disponible nativement sur le canvas
+    }
+  }
+}
+
+// Sauvegarder la signature
+const sauvegarderSignature = () => {
+  if (signaturePad.value && !signaturePad.value.isEmpty()) {
+    signatureClient.value = signaturePad.value.toDataURL()
+  }
+}
+
+const confirmerCommencerLivraison = async () => {
+  if (!selectedLivraison.value) return
+
+  try {
+    console.log('🚀 [LivraisonView] Finalisation de la livraison:', selectedLivraison.value.id)
+
+    // Validation des quantités
+    let hasError = false
+    const produitsLivraison = selectedLivraison.value.produits.map(produit => {
+      const quantiteLivree = quantitesLivraison.value[produit.nom] || 0
+      const quantiteCommandee = produit.quantiteCommandee || produit.quantite || 0
+
+      if (quantiteLivree > quantiteCommandee) {
+        alert(`Erreur: La quantité livrée pour "${produit.nom}" (${quantiteLivree}) dépasse la quantité commandée (${quantiteCommandee})`)
+        hasError = true
+        return null
+      }
+
+      return {
+        ...produit,
+        quantiteLivree,
+        difference: quantiteCommandee - quantiteLivree
+      }
+    }).filter(Boolean)
+
+    if (hasError) return
+
+    // Vérification de la signature
+    if (!signatureClient.value) {
+      alert('Veuillez signer avant de finaliser la livraison')
+      return
+    }
+
+    // Mettre à jour la livraison avec les quantités et la signature
+    const livraisonMiseAJour = {
+      ...selectedLivraison.value,
+      statut: 'livre' as const,
+      produits: produitsLivraison,
+      signature_client: signatureClient.value,
+      observations: observationsLivraison.value,
+      heure_livraison: new Date().toTimeString().slice(0, 5),
+      date_livraison: new Date().toISOString().split('T')[0]
+    }
+
+    // D'abord mettre à jour les quantités via l'API
+    const { mettreAJourQuantitesLivrees, finaliserLivraisonAvecSignature } = useLaravelApi()
+
+    // Préparer les quantités pour l'API
+    const quantitesForAPI = Object.entries(quantitesLivraison.value).map(([nom, quantite]) => ({
+      nom,
+      quantite
+    }))
+
+    // Mettre à jour les quantités
+    await mettreAJourQuantitesLivrees(selectedLivraison.value.id!, { quantites_livrees: quantitesForAPI })
+
+    // Finaliser avec signature
+    const requestData: any = {
+      signature_client: signatureClient.value
+    }
+
+    // Ajouter les observations seulement si elles ne sont pas vides
+    if (observationsLivraison.value && observationsLivraison.value.trim()) {
+      requestData.observations = observationsLivraison.value.trim()
+    }
+
+    const resultat = await finaliserLivraisonAvecSignature(selectedLivraison.value.id!, requestData)
+
+    console.log('✅ [LivraisonView] Livraison finalisée avec succès')
+
+    // Recharger les livraisons
+    await loadLivraisons()
+
+    closeCommencerModal()
+
+    // Afficher un message de succès avec les documents générés
+    let message = 'Livraison finalisée avec succès !'
+
+    if (resultat && (resultat as any).documents) {
+      const docs = (resultat as any).documents
+      message += '\n\nDocuments générés :'
+      if (docs.bon_livraison) {
+        message += `\n• Bon de livraison (${docs.bon_livraison.numero})`
+      }
+      if (docs.facture) {
+        message += `\n• Facture (${docs.facture.numero})`
+      }
+    }
+
+    // Afficher les informations sur les livraisons partielles
+    if (resultat && (resultat as any).livraison_partielle) {
+      const restes = (resultat as any).restes_a_livrer
+      const nouvelleLivraison = (resultat as any).nouvelle_livraison
+
+      message += '\n\n⚠️ Livraison partielle détectée !'
+      message += '\n\nArticles non livrés :'
+
+      restes.forEach((reste: any) => {
+        message += `\n• ${reste.nom}: ${reste.quantite_restante} ${reste.unite} restant(s)`
+      })
+
+      if (nouvelleLivraison) {
+        message += `\n\n✅ Nouvelle livraison créée automatiquement`
+        message += `\n• Numéro BL: ${nouvelleLivraison.numero_bl}`
+        message += `\n• Statut: En attente`
+      }
+    }
+
+    if (resultat && (resultat as any).documents) {
+      message += '\n\nVous pouvez consulter tous les documents dans l\'onglet Documents.'
+    }
+
+    alert(message)
+
+  } catch (error) {
+    console.error('❌ [LivraisonView] Erreur lors de la finalisation de la livraison:', error)
+    alert('Erreur lors de la finalisation de la livraison')
+  }
+}
+
+
+const getStatusText = (statut: string, livraison?: ExtendedLivraison) => {
   switch (statut) {
     case 'en_attente':
       return 'En attente'
@@ -546,7 +763,7 @@ const getStatusText = (statut: string, livraison?: CompleteLivraison) => {
   }
 }
 
-const getStatusClass = (statut: string, livraison?: CompleteLivraison) => {
+const getStatusClass = (statut: string, livraison?: ExtendedLivraison) => {
   switch (statut) {
     case 'en_attente':
       return 'bg-yellow-100 text-yellow-800'
@@ -582,7 +799,7 @@ const formatDate = (date: string) => {
 }
 
 // Méthodes pour le générateur de BL
-const openBLGenerator = (livraison: CompleteLivraison) => {
+const openBLGenerator = (livraison: ExtendedLivraison) => {
   selectedBLLivraison.value = livraison
   showBLGenerator.value = true
 }
@@ -602,12 +819,6 @@ onMounted(async () => {
   console.log('🔍 [LivraisonView] onMounted - Début')
   console.log('🔍 [LivraisonView] Chargement des commandes et livraisons...')
   
-  try {
-    await loadCommandes()
-    console.log('✅ [LivraisonView] Commandes chargées avec succès')
-  } catch (error) {
-    console.error('❌ [LivraisonView] Erreur lors du chargement des commandes:', error)
-  }
   
   try {
     await loadLivraisons()
@@ -644,15 +855,12 @@ onMounted(async () => {
               <p class="page-subtitle">Suivi des expéditions et gestion des bordereaux</p>
             </div>
           </div>
-          <button
-            @click="openModal()"
-            class="inline-flex items-center px-6 py-3 bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white font-semibold rounded-2xl transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
-          >
+          <div class="inline-flex items-center px-6 py-3 bg-gray-300 text-gray-500 font-semibold rounded-2xl cursor-not-allowed" title="Les livraisons sont créées automatiquement depuis les commandes">
             <svg class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v3m0 0v3m0-3h3m-3 0H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
-            Nouvelle livraison
-          </button>
+            Livraisons créées depuis commandes
+          </div>
         </div>
       </div>
     </div>
@@ -717,78 +925,6 @@ onMounted(async () => {
       </div>
     </div>
 
-    <!-- Commandes à livrer -->
-      <div v-if="commandesALivrer.length > 0" class="commandes-section">
-        <div class="section-header">
-          <h3 class="section-title">Commandes à livrer</h3>
-          <p class="section-subtitle">Commandes confirmées et préparées prêtes pour la livraison</p>
-        </div>
-        
-      <div class="commandes-grid">
-        <div 
-          v-for="commande in commandesALivrer" 
-          :key="commande.id"
-          class="commande-card"
-        >
-          <div class="commande-header">
-            <div class="commande-info">
-                <h4 class="commande-numero">{{ commande.numeroCommande }}</h4>
-              <p class="commande-client">{{ commande.client }}</p>
-            </div>
-            <div class="commande-statut">
-                <span class="statut-badge statut-preparation">{{ getStatutText(commande.statut) }}</span>
-            </div>
-          </div>
-          
-          <div class="commande-details">
-            <div class="detail-item">
-                <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
-                </svg>
-              <span>{{ commande.telephone }}</span>
-            </div>
-            <div class="detail-item">
-                <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                </svg>
-              <span>{{ formatDate(commande.date) }}</span>
-            </div>
-            <div class="detail-item">
-                <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
-                </svg>
-              <span>{{ commande.produits.length }} produits</span>
-            </div>
-          </div>
-
-          <div class="commande-produits">
-              <h5 class="produits-title">Produits ({{ commande.produits.length }})</h5>
-            <div class="produits-list">
-              <div 
-                v-for="produit in commande.produits" 
-                :key="produit.nom"
-                class="produit-item"
-              >
-                <span class="produit-nom">{{ produit.nom }}</span>
-                <span class="produit-quantite">{{ produit.quantite }} {{ produit.unite }}</span>
-              </div>
-            </div>
-          </div>
-
-          <div class="commande-actions">
-            <button 
-                @click="creerLivraisonDepuisCommande(commande)" 
-              class="action-btn action-btn-primary"
-            >
-                <svg class="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
-                </svg>
-              Créer Livraison
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
 
       <!-- Onglets -->
       <div class="tabs-container">
@@ -830,10 +966,10 @@ onMounted(async () => {
 
             <div v-else class="livraison-list">
               <div
-                v-for="livraison in livraisons"
-        :key="livraison.id"
-        class="livraison-card"
-      >
+                v-for="livraison in livraisonsNonTerminees"
+                :key="livraison.id"
+                class="livraison-card"
+              >
                 <div class="livraison-content">
                   <div class="livraison-main">
                     <div class="livraison-header-info">
@@ -841,7 +977,7 @@ onMounted(async () => {
                             :class="getStatusClass(livraison.statut, livraison)">
                         {{ getStatusText(livraison.statut, livraison) }}
                       </span>
-                      <span class="livraison-number">#{{ livraison.numeroBl }}</span>
+                      <span class="livraison-number">#{{ livraison.numero_bl }}</span>
                       
                       <!-- Indicateur de clôture -->
                       <span v-if="livraison.cloturee" class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
@@ -1048,7 +1184,7 @@ onMounted(async () => {
                             :class="getStatusClass(livraison.statut, livraison)">
                         {{ getStatusText(livraison.statut, livraison) }}
                       </span>
-                      <span class="livraison-number">#{{ livraison.numeroBl }}</span>
+                      <span class="livraison-number">#{{ livraison.numero_bl }}</span>
                       <!-- Affichage spécial pour les livraisons clôturées -->
                       <div v-if="livraison.cloturee" class="text-xs text-purple-600 font-medium">
                         Clôturée le {{ livraison.dateClotureManuelle ? new Date(livraison.dateClotureManuelle).toLocaleDateString('fr-FR') : 'N/A' }}
@@ -1060,11 +1196,11 @@ onMounted(async () => {
                     <div class="livraison-details">
                       <div class="detail-item">
                         <span class="detail-label">Date de livraison:</span>
-                        <p class="detail-value">{{ livraison.dateLivraison || 'N/A' }}</p>
+                        <p class="detail-value">{{ livraison.date_livraison || 'N/A' }}</p>
                       </div>
                       <div class="detail-item">
                         <span class="detail-label">Heure:</span>
-                        <p class="detail-value">{{ livraison.heureLivraison || 'N/A' }}</p>
+                        <p class="detail-value">{{ livraison.heure_livraison || 'N/A' }}</p>
                       </div>
                       <div class="detail-item">
                         <span class="detail-label">Chauffeur:</span>
@@ -1143,7 +1279,173 @@ onMounted(async () => {
       </div>
         </div>
 
-    <!-- Modal de livraison avec signature supprimé - plus nécessaire -->
+    <!-- Modal de saisie des quantités et signature -->
+    <div v-if="showCommencerModal && selectedLivraison" class="modal-overlay">
+      <div class="modal-container modal-large">
+        <div class="modal-header">
+          <div class="modal-header-content">
+            <h2 class="modal-title">Finaliser la livraison - {{ selectedLivraison.client }}</h2>
+            <button @click="closeCommencerModal" class="modal-close">
+              <svg class="modal-close-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <div class="modal-body">
+          <div class="livraison-process">
+            <!-- Informations de la livraison -->
+            <div class="livraison-info-section">
+              <h3 class="section-title">Informations de livraison</h3>
+              <div class="info-grid">
+                <div class="info-item">
+                  <span class="info-label">N° BL :</span>
+                  <span class="info-value">{{ selectedLivraison.numero_bl }}</span>
+                </div>
+                <div class="info-item">
+                  <span class="info-label">Client :</span>
+                  <span class="info-value">{{ selectedLivraison.client }}</span>
+                </div>
+                <div class="info-item">
+                  <span class="info-label">Téléphone :</span>
+                  <span class="info-value">{{ selectedLivraison.telephone }}</span>
+                </div>
+                <div class="info-item">
+                  <span class="info-label">Chauffeur :</span>
+                  <span class="info-value">{{ selectedLivraison.chauffeur }}</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Saisie des quantités -->
+            <div class="quantites-section">
+              <h3 class="section-title">Quantités livrées</h3>
+              <div class="quantites-table">
+                <div class="table-header">
+                  <div class="col-produit">Produit</div>
+                  <div class="col-commandee">Commandée</div>
+                  <div class="col-livree">Livrée</div>
+                  <div class="col-difference">Différence</div>
+                </div>
+                <div class="table-body">
+                  <div
+                    v-for="(produit, index) in selectedLivraison.produits"
+                    :key="index"
+                    class="table-row"
+                  >
+                    <div class="col-produit">
+                      <span class="produit-nom">{{ produit.nom }}</span>
+                      <span class="produit-unite">{{ produit.unite }}</span>
+                    </div>
+                    <div class="col-commandee">
+                      <span class="quantite-commandee">
+                        {{ produit.quantiteCommandee || produit.quantite }}
+                      </span>
+                    </div>
+                    <div class="col-livree">
+                      <input
+                        v-model.number="quantitesLivraison[produit.nom]"
+                        type="number"
+                        min="0"
+                        :max="produit.quantiteCommandee || produit.quantite"
+                        class="quantite-input"
+                        :class="{
+                          'input-warning': (quantitesLivraison[produit.nom] || 0) > (produit.quantiteCommandee || produit.quantite || 0),
+                          'input-success': (quantitesLivraison[produit.nom] || 0) === (produit.quantiteCommandee || produit.quantite || 0),
+                          'input-partial': (quantitesLivraison[produit.nom] || 0) > 0 && (quantitesLivraison[produit.nom] || 0) < (produit.quantiteCommandee || produit.quantite || 0)
+                        }"
+                      />
+                    </div>
+                    <div class="col-difference">
+                      <span class="difference-value" :class="{
+                        'text-green-600': ((produit.quantiteCommandee || produit.quantite || 0) - (quantitesLivraison[produit.nom] || 0)) === 0,
+                        'text-orange-600': ((produit.quantiteCommandee || produit.quantite || 0) - (quantitesLivraison[produit.nom] || 0)) > 0,
+                        'text-red-600': ((produit.quantiteCommandee || produit.quantite || 0) - (quantitesLivraison[produit.nom] || 0)) < 0
+                      }">
+                        {{ (produit.quantiteCommandee || produit.quantite || 0) - (quantitesLivraison[produit.nom] || 0) }}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Observations -->
+            <div class="observations-section">
+              <h3 class="section-title">Observations (optionnel)</h3>
+              <textarea
+                v-model="observationsLivraison"
+                rows="3"
+                placeholder="Ajoutez des observations sur cette livraison..."
+                class="observations-textarea"
+              ></textarea>
+            </div>
+
+            <!-- Signature client -->
+            <div class="signature-section">
+              <h3 class="section-title">Signature du client <span class="text-red-500">*</span></h3>
+              <div class="signature-container">
+                <div class="signature-pad-container">
+                  <canvas
+                    ref="signaturePad"
+                    class="signature-canvas"
+                    width="400"
+                    height="200"
+                  ></canvas>
+                  <div class="signature-controls">
+                    <button
+                      type="button"
+                      @click="effacerSignature"
+                      class="btn btn-secondary btn-sm"
+                    >
+                      <svg class="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                      Effacer
+                    </button>
+                    <button
+                      type="button"
+                      @click="sauvegarderSignature"
+                      class="btn btn-primary btn-sm"
+                    >
+                      <svg class="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                      </svg>
+                      Sauvegarder
+                    </button>
+                  </div>
+                </div>
+                <div v-if="signatureClient" class="signature-preview">
+                  <p class="signature-preview-label">Aperçu de la signature :</p>
+                  <img :src="signatureClient" alt="Signature client" class="signature-image" />
+                </div>
+              </div>
+            </div>
+
+            <!-- Actions -->
+            <div class="modal-actions">
+              <button
+                @click="closeCommencerModal"
+                class="btn btn-secondary"
+              >
+                Annuler
+              </button>
+              <button
+                @click="confirmerCommencerLivraison"
+                class="btn btn-primary"
+                :disabled="!signatureClient"
+              >
+                <svg class="btn-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                Finaliser la livraison
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
 
     <!-- Modal d'affichage du bordereau -->
     <div v-if="showBordereauModal && selectedBordereauLivraison" class="modal-overlay">
@@ -1318,6 +1620,7 @@ onMounted(async () => {
 .livraison-container {
   min-height: 100vh;
   background-color: #f9fafb;
+  overflow-x: hidden;
 }
 
 .livraison-header {
@@ -1571,9 +1874,11 @@ onMounted(async () => {
   background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
   border: 1px solid #e2e8f0;
   border-radius: 1.5rem;
-  padding: 2rem;
+  padding: 1.5rem;
   transition: all 0.3s ease;
   box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  max-width: 100%;
+  overflow: hidden;
 }
 
 .livraison-card:hover {
@@ -1584,8 +1889,16 @@ onMounted(async () => {
 
 .livraison-content {
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+@media (min-width: 1024px) {
+  .livraison-content {
+    flex-direction: row;
+    align-items: flex-start;
+    justify-content: space-between;
+  }
 }
 
 .livraison-main {
@@ -1755,10 +2068,18 @@ onMounted(async () => {
 
 /* Actions */
 .livraison-actions {
-  margin-left: 1.5rem;
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
+  width: 100%;
+}
+
+@media (min-width: 1024px) {
+  .livraison-actions {
+    margin-left: 1.5rem;
+    width: auto;
+    min-width: 200px;
+  }
 }
 
 /* Boutons améliorés */
@@ -2158,6 +2479,287 @@ onMounted(async () => {
   overflow-y: auto;
 }
 
+/* Styles pour le modal de livraison */
+.livraison-process {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+.livraison-info-section {
+  background: linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 100%);
+  border: 1px solid #bbf7d0;
+  border-radius: 1rem;
+  padding: 1.5rem;
+}
+
+.info-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.info-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.info-label {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #6b7280;
+}
+
+.info-value {
+  font-size: 0.875rem;
+  color: #111827;
+  font-weight: 500;
+}
+
+/* Section quantités */
+.quantites-section {
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 1rem;
+  padding: 1.5rem;
+}
+
+.quantites-table {
+  margin-top: 1rem;
+}
+
+.table-header {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr 1fr;
+  gap: 1rem;
+  padding: 0.75rem;
+  background: #f9fafb;
+  border-radius: 0.5rem;
+  font-weight: 600;
+  color: #374151;
+  font-size: 0.875rem;
+}
+
+.table-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.table-row {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr 1fr;
+  gap: 1rem;
+  padding: 0.75rem;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 0.5rem;
+  align-items: center;
+  transition: all 0.2s ease;
+}
+
+.table-row:hover {
+  background: #f9fafb;
+  border-color: #d1d5db;
+}
+
+.col-produit {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.produit-nom {
+  font-weight: 500;
+  color: #111827;
+}
+
+.produit-unite {
+  font-size: 0.75rem;
+  color: #6b7280;
+}
+
+.quantite-commandee {
+  text-align: center;
+  font-weight: 500;
+  color: #374151;
+}
+
+.quantite-input {
+  width: 100%;
+  padding: 0.5rem;
+  border: 1px solid #d1d5db;
+  border-radius: 0.375rem;
+  text-align: center;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.quantite-input:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.input-success {
+  border-color: #10b981;
+  background-color: #f0fdf4;
+  color: #059669;
+}
+
+.input-partial {
+  border-color: #f59e0b;
+  background-color: #fffbeb;
+  color: #d97706;
+}
+
+.input-warning {
+  border-color: #ef4444;
+  background-color: #fef2f2;
+  color: #dc2626;
+}
+
+.difference-value {
+  text-align: center;
+  font-weight: 600;
+  font-size: 0.875rem;
+}
+
+/* Section observations */
+.observations-section {
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 1rem;
+  padding: 1.5rem;
+}
+
+.observations-textarea {
+  width: 100%;
+  padding: 0.75rem;
+  border: 1px solid #d1d5db;
+  border-radius: 0.5rem;
+  resize: vertical;
+  font-family: inherit;
+  margin-top: 0.5rem;
+  transition: border-color 0.2s ease;
+}
+
+.observations-textarea:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+/* Section signature */
+.signature-section {
+  background: linear-gradient(135deg, #fefbff 0%, #f8fafc 100%);
+  border: 1px solid #e2e8f0;
+  border-radius: 1rem;
+  padding: 1.5rem;
+}
+
+.signature-container {
+  margin-top: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.signature-pad-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+}
+
+.signature-canvas {
+  border: 2px solid #d1d5db;
+  border-radius: 0.5rem;
+  background: #ffffff;
+  cursor: crosshair;
+  touch-action: none;
+}
+
+.signature-controls {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.btn-sm {
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+}
+
+.signature-preview {
+  text-align: center;
+}
+
+.signature-preview-label {
+  font-size: 0.875rem;
+  color: #6b7280;
+  margin-bottom: 0.5rem;
+}
+
+.signature-image {
+  max-width: 200px;
+  border: 1px solid #d1d5db;
+  border-radius: 0.5rem;
+  background: #ffffff;
+}
+
+/* Actions du modal */
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid #e5e7eb;
+  margin-top: 1rem;
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.btn:disabled:hover {
+  transform: none;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}
+
+/* Responsive design pour le modal de livraison */
+@media (max-width: 768px) {
+  .table-header,
+  .table-row {
+    grid-template-columns: 1fr;
+    gap: 0.5rem;
+  }
+
+  .col-produit,
+  .quantite-commandee,
+  .difference-value {
+    text-align: left;
+  }
+
+  .signature-canvas {
+    width: 100%;
+    max-width: 300px;
+    height: 150px;
+  }
+
+  .modal-actions {
+    flex-direction: column;
+  }
+
+  .info-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* Responsive design pour les modals */
 @media (max-width: 768px) {
   .modal-large {
@@ -2166,15 +2768,15 @@ onMounted(async () => {
     margin: 1%;
     max-height: 95vh;
   }
-  
+
   .modal-container {
     padding: 0.5rem;
   }
-  
+
   .modal-header {
     padding: 1rem 0.5rem;
   }
-  
+
   .modal-body {
     padding: 0.5rem;
   }

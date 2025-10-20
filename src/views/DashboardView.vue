@@ -3,6 +3,19 @@
     <!-- Debug info -->
     <div style="background: #f0f0f0; padding: 10px; margin-bottom: 20px; border-radius: 5px;">
       <strong>Debug Dashboard:</strong> Composant chargé - {{ new Date().toLocaleTimeString() }}
+      <br>
+      <strong>Données chargées:</strong>
+      <ul>
+        <li>Commandes: {{ commandes.length }}</li>
+        <li>Livraisons: {{ livraisons.length }}</li>
+        <li>Stats: {{ JSON.stringify(stats) }}</li>
+      </ul>
+      <div v-if="commandes.length > 0">
+        <strong>Première commande:</strong> {{ JSON.stringify(commandes[0]) }}
+      </div>
+      <div v-if="livraisons.length > 0">
+        <strong>Première livraison:</strong> {{ JSON.stringify(livraisons[0]) }}
+      </div>
     </div>
     <!-- Header -->
     <div class="dashboard-header">
@@ -214,7 +227,7 @@
               class="commande-item"
             >
               <div class="commande-info">
-                <div class="commande-numero">{{ commande.numeroCommande }}</div>
+                <div class="commande-numero">{{ commande.numero_commande || commande.numeroCommande }}</div>
                 <div class="commande-client">{{ commande.client }}</div>
               </div>
               <div class="commande-details">
@@ -248,7 +261,7 @@
               class="livraison-item"
             >
               <div class="livraison-info">
-                <div class="livraison-numero">{{ livraison.numeroBl }}</div>
+                <div class="livraison-numero">{{ livraison.numero_bl || livraison.numeroBl }}</div>
                 <div class="livraison-client">{{ livraison.client }}</div>
               </div>
               <div class="livraison-details">
@@ -301,17 +314,13 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { useCompleteLaravelService, type CompleteCommande, type CompleteLivraison, type CompleteAnalyse } from '@/services/completeLaravelService'
+import { useLaravelApi, type LaravelCommande, type LaravelLivraison } from '@/services/laravelApiService'
 
 const {
   getDashboardStats,
   getCommandes,
-  getLivraisons,
-  getProductions,
-  getAnalyses,
-  getStockInfo,
-  getProductionsDuJour
-} = useCompleteLaravelService()
+  getLivraisons
+} = useLaravelApi()
 
 console.log('🔧 [DashboardView] Service Laravel importé:', {
   getDashboardStats: !!getDashboardStats,
@@ -322,9 +331,9 @@ console.log('🔧 [DashboardView] Service Laravel importé:', {
 
 // État réactif
 const stats = ref<any>({})
-const commandes = ref<CompleteCommande[]>([])
-const livraisons = ref<CompleteLivraison[]>([])
-const analyses = ref<CompleteAnalyse[]>([])
+const commandes = ref<LaravelCommande[]>([])
+const livraisons = ref<LaravelLivraison[]>([])
+const analyses = ref<any[]>([])
 const stockInfo = ref<any>({})
 const productionsDuJour = ref<any>({})
 const livraisonsRecentes = ref<any>({})
@@ -382,31 +391,33 @@ const loadDashboardData = async () => {
     console.log('🔍 [DashboardView] Appel de getCommandes()...')
     const allCommandes = await getCommandes()
     commandes.value = allCommandes
-    console.log('✅ [DashboardView] Commandes chargées:', commandes.value.length, allCommandes.slice(0, 2))
+    console.log('✅ [DashboardView] Commandes chargées:', commandes.value.length)
+    console.log('📋 [DashboardView] Première commande:', allCommandes[0])
+    console.log('📋 [DashboardView] Structure commande:', allCommandes[0] ? Object.keys(allCommandes[0]) : 'Aucune commande')
     
     // Charger les livraisons
     console.log('🔍 [DashboardView] Appel de getLivraisons()...')
     const allLivraisons = await getLivraisons()
     livraisons.value = allLivraisons
-    console.log('✅ [DashboardView] Livraisons chargées:', livraisons.value.length, allLivraisons.slice(0, 2))
+    console.log('✅ [DashboardView] Livraisons chargées:', livraisons.value.length)
+    console.log('📦 [DashboardView] Première livraison:', allLivraisons[0])
+    console.log('📦 [DashboardView] Structure livraison:', allLivraisons[0] ? Object.keys(allLivraisons[0]) : 'Aucune livraison')
     
-           // Charger les analyses
-           console.log('🔍 [DashboardView] Appel de getAnalyses()...')
-           const allAnalyses = await getAnalyses()
-           analyses.value = allAnalyses
-           console.log('✅ [DashboardView] Analyses chargées:', analyses.value.length, allAnalyses.slice(0, 2))
+           // Analyses - pour l'instant vide car pas d'endpoint spécifique
+           console.log('🔍 [DashboardView] Analyses non disponibles pour le moment')
+           analyses.value = []
            
-           // Charger les informations du stock
-           console.log('🔍 [DashboardView] Appel de getStockInfo()...')
-           const stockData = await getStockInfo()
-           stockInfo.value = stockData
-           console.log('✅ [DashboardView] Stock chargé:', stockData)
+           // Stock - calculé à partir des articles
+           console.log('🔍 [DashboardView] Calcul du stock à partir des articles...')
+           stockInfo.value = {
+             totalArticles: stats.value.totalArticles,
+             stockCritique: 0 // Sera calculé plus tard
+           }
            
-           // Charger les productions du jour
-           console.log('🔍 [DashboardView] Appel de getProductionsDuJour()...')
-           const productionsJour = await getProductionsDuJour()
-           productionsDuJour.value = productionsJour
-           console.log('✅ [DashboardView] Productions du jour chargées:', productionsJour)
+           // Productions du jour - pour l'instant vide car pas d'endpoint spécifique
+           console.log('🔍 [DashboardView] Productions du jour non disponibles pour le moment')
+           productionsDuJour.value = {}
+           console.log('✅ [DashboardView] Productions du jour initialisées')
            
            // Calculer les livraisons récentes depuis les données chargées
            console.log('🔍 [DashboardView] Calcul des livraisons récentes...')

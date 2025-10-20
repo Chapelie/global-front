@@ -77,10 +77,10 @@
             <label class="filter-label">Type</label>
             <select v-model="selectedType" class="filter-select">
               <option value="">Tous les types</option>
-              <option value="bon_livraison">Bon de livraison</option>
-              <option value="facture">Facture</option>
-              <option value="devis">Devis</option>
-              <option value="autre">Autre</option>
+              <option value="delivery_note">Bon de livraison</option>
+              <option value="invoice">Facture</option>
+              <option value="receipt">Reçu</option>
+              <option value="report">Rapport</option>
             </select>
           </div>
         </div>
@@ -98,19 +98,19 @@
               <DocumentTextIcon class="document-icon" />
             </div>
             <div class="document-info">
-              <h3 class="document-title">{{ document.nom }}</h3>
-              <p class="document-description">{{ document.description }}</p>
+              <h3 class="document-title">{{ document.titre }}</h3>
+              <p class="document-description">{{ document.numero }}</p>
             </div>
           </div>
 
           <div class="document-meta">
             <span class="document-type">{{ getTypeLabel(document.type) }}</span>
-            <span class="document-size">{{ formatSize(document.taille) }}</span>
+            <span class="document-size">{{ document.file_size }}</span>
           </div>
 
           <div class="document-actions">
             <a
-              :href="document.url"
+              :href="document.file_url"
               target="_blank"
               class="action-button action-primary"
             >
@@ -119,7 +119,7 @@
             </a>
 
             <a
-              :href="document.url"
+              :href="document.file_url"
               download
               class="action-button action-secondary"
             >
@@ -127,7 +127,7 @@
               Télécharger
             </a>
 
-            <button @click="handleDeleteDocument(document.id!)" class="action-button action-danger">
+            <button @click="handleDeleteDocument(document.id)" class="action-button action-danger">
               <TrashIcon class="h-4 w-4 mr-2" />
               Supprimer
             </button>
@@ -149,7 +149,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { useCompleteHybridService, type CompleteDocument } from '@/services/completeHybridService'
+import { useLaravelApi } from '@/services/laravelApiService'
 import {
   DocumentTextIcon,
   TruckIcon,
@@ -159,31 +159,28 @@ import {
   TrashIcon
 } from '@heroicons/vue/24/outline'
 
-const {
-  getDocuments,
-  deleteDocument
-} = useCompleteHybridService()
+const { getDocuments, deleteDocument } = useLaravelApi()
 
 // État réactif
-const documents = ref<CompleteDocument[]>([])
+const documents = ref<any[]>([])
 const searchTerm = ref('')
 const selectedType = ref('')
 
 // Computed
 const bonsDeLivraison = computed(() =>
-  documents.value.filter(d => d.type === 'bon_livraison')
+  documents.value.filter(d => d.type === 'delivery_note')
 )
 
 const totalSize = computed(() =>
-  documents.value.reduce((sum, doc) => sum + doc.taille, 0)
+  documents.value.reduce((sum, doc) => sum + (parseFileSize(doc.file_size) || 0), 0)
 )
 
 const filteredDocuments = computed(() => {
   return documents.value.filter(document => {
-    const matchesSearch = document.nom.toLowerCase().includes(searchTerm.value.toLowerCase()) ||
-                         document.description?.toLowerCase().includes(searchTerm.value.toLowerCase())
+    const matchesSearch = document.titre.toLowerCase().includes(searchTerm.value.toLowerCase()) ||
+                         document.numero?.toLowerCase().includes(searchTerm.value.toLowerCase())
     const matchesType = !selectedType.value || document.type === selectedType.value
-    
+
     return matchesSearch && matchesType
   })
 })
@@ -203,7 +200,7 @@ const handleDeleteDocument = async (id: string) => {
   if (confirm('Êtes-vous sûr de vouloir supprimer ce document ?')) {
     try {
       console.log('🗑️ [DocumentsView] Suppression du document:', id)
-      await deleteDocument(id)
+      await deleteDocument(Number(id))
       await loadDocuments()
       console.log('✅ [DocumentsView] Document supprimé')
     } catch (error) {
@@ -214,12 +211,30 @@ const handleDeleteDocument = async (id: string) => {
 
 const getTypeLabel = (type: string) => {
   const labels: Record<string, string> = {
-    'bon_livraison': 'Bon de livraison',
-    'facture': 'Facture',
-    'devis': 'Devis',
-    'autre': 'Autre'
+    'delivery_note': 'Bon de livraison',
+    'invoice': 'Facture',
+    'receipt': 'Reçu',
+    'report': 'Rapport'
   }
   return labels[type] || type
+}
+
+const parseFileSize = (sizeStr: string): number => {
+  if (!sizeStr) return 0
+  const match = sizeStr.match(/^([\d.]+)\s*([A-Z]+)$/)
+  if (!match) return 0
+
+  const size = parseFloat(match[1])
+  const unit = match[2]
+
+  const multipliers: Record<string, number> = {
+    'B': 1,
+    'KB': 1024,
+    'MB': 1024 * 1024,
+    'GB': 1024 * 1024 * 1024
+  }
+
+  return size * (multipliers[unit] || 1)
 }
 
 const formatSize = (bytes: number) => {

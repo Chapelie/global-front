@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { RouterView, useRoute, useRouter } from 'vue-router'
-import { useAuth } from './services/auth'
+import { useAuth } from '@/services/auth'
 import { useLogo } from './composables/useLogo'
 import { 
   Bars3Icon, 
@@ -43,7 +43,7 @@ const currentPage = computed(() => {
   return navigation.find(item => item.href === route.path)?.name || 'Dashboard'
 })
 
-const { user: currentUser } = useAuth()
+const { currentUser } = useAuth()
 
 const toggleSidebar = () => {
   sidebarOpen.value = !sidebarOpen.value
@@ -66,7 +66,7 @@ const handleLogout = async () => {
   <!-- Pages principales - Layout avec sidebar/navbar -->
   <div v-else class="min-h-screen bg-gray-50">
     <!-- Sidebar pour mobile -->
-    <div v-if="sidebarOpen" class="relative z-50 lg:hidden">
+    <div v-if="sidebarOpen" class="relative z-50 lg:hidden mobile-safe-area">
       <div class="fixed inset-0 bg-gray-900 bg-opacity-75 backdrop-blur-sm" @click="toggleSidebar"></div>
 
       <div class="fixed inset-0 z-40 flex">
@@ -123,11 +123,11 @@ const handleLogout = async () => {
           <div class="p-4 border-t border-gray-100 bg-white">
             <div class="flex items-center p-3 rounded-xl bg-gray-50">
               <div class="h-10 w-10 rounded-full bg-gradient-to-r from-orange-500 to-orange-600 flex items-center justify-center shadow-lg">
-                <span class="text-sm font-bold text-white">{{ (currentUser?.user_metadata?.first_name || currentUser?.email || 'U')?.charAt(0).toUpperCase() }}</span>
+                <span class="text-sm font-bold text-white">{{ (currentUser?.name || currentUser?.email || 'U')?.charAt(0).toUpperCase() }}</span>
               </div>
               <div class="ml-3 flex-1">
-                <p class="text-sm font-semibold text-gray-900">{{ currentUser?.user_metadata?.first_name || currentUser?.email }}</p>
-                <p class="text-xs text-gray-600">{{ currentUser?.user_metadata?.role }}</p>
+                <p class="text-sm font-semibold text-gray-900">{{ currentUser?.name || currentUser?.email }}</p>
+                <p class="text-xs text-gray-600">{{ currentUser?.roles?.[0]?.name || 'Utilisateur' }}</p>
               </div>
             </div>
           </div>
@@ -184,11 +184,11 @@ const handleLogout = async () => {
         <div class="p-4 border-t border-gray-100 bg-white">
           <div class="flex items-center p-3 rounded-xl bg-gray-50">
             <div class="h-10 w-10 rounded-full bg-gradient-to-r from-orange-500 to-orange-600 flex items-center justify-center shadow-lg">
-              <span class="text-sm font-bold text-white">{{ currentUser?.user_metadata?.first_name?.charAt(0).toUpperCase() || currentUser?.email?.charAt(0).toUpperCase() }}</span>
+              <span class="text-sm font-bold text-white">{{ currentUser?.name?.charAt(0).toUpperCase() || currentUser?.email?.charAt(0).toUpperCase() }}</span>
             </div>
             <div class="ml-3 flex-1">
-              <p class="text-sm font-semibold text-gray-900">{{ currentUser?.user_metadata?.first_name || currentUser?.email }}</p>
-              <p class="text-xs text-gray-600">{{ currentUser?.user_metadata?.role || 'Utilisateur' }}</p>
+              <p class="text-sm font-semibold text-gray-900">{{ currentUser?.name || currentUser?.email }}</p>
+              <p class="text-xs text-gray-600">{{ currentUser?.roles?.[0]?.name || 'Utilisateur' }}</p>
             </div>
             <button
               @click="handleLogout"
@@ -204,8 +204,8 @@ const handleLogout = async () => {
 
     <!-- Contenu principal -->
     <div class="lg:pl-72">
-      <!-- Header sticky amélioré -->
-      <div class="sticky top-0 z-40 flex h-20 shrink-0 items-center gap-x-4 border-b border-gray-200 bg-white/80 backdrop-blur-xl px-4 shadow-lg sm:gap-x-6 sm:px-6 lg:px-8">
+      <!-- Header sticky amélioré avec safe areas -->
+      <div class="app-header sticky top-0 z-40 flex h-16 shrink-0 items-center gap-x-4 border-b border-gray-200 bg-white/80 backdrop-blur-xl px-4 shadow-lg sm:gap-x-6 sm:px-6 lg:px-8 mobile-safe-area">
         <button
           type="button"
           class="-m-2.5 p-2.5 text-gray-700 hover:text-orange-600 transition-colors lg:hidden"
@@ -238,11 +238,11 @@ const handleLogout = async () => {
             <div class="flex items-center gap-x-4">
               <div class="flex items-center space-x-3 p-2 rounded-xl hover:bg-gray-50 transition-colors">
                 <div class="h-10 w-10 rounded-full bg-gradient-to-r from-orange-500 to-orange-600 flex items-center justify-center shadow-lg">
-                  <span class="text-sm font-bold text-white">{{ (currentUser?.user_metadata?.first_name || currentUser?.email || 'U')?.charAt(0).toUpperCase() }}</span>
+                  <span class="text-sm font-bold text-white">{{ (currentUser?.name || currentUser?.email || 'U')?.charAt(0).toUpperCase() }}</span>
                 </div>
                 <div class="hidden sm:block">
-                  <p class="text-sm font-semibold text-gray-900">{{ currentUser?.user_metadata?.first_name || currentUser?.email }}</p>
-                  <p class="text-xs text-gray-600">{{ currentUser?.user_metadata?.role }}</p>
+                  <p class="text-sm font-semibold text-gray-900">{{ currentUser?.name || currentUser?.email }}</p>
+                  <p class="text-xs text-gray-600">{{ currentUser?.roles?.[0]?.name || 'Utilisateur' }}</p>
                 </div>
               </div>
               <button
@@ -258,7 +258,7 @@ const handleLogout = async () => {
       </div>
 
       <!-- Contenu de la page -->
-      <main class="py-8">
+      <main class="main-content py-8">
         <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <RouterView />
         </div>

@@ -1,8 +1,6 @@
 // Composable pour gérer le logo de l'application
-import logoImage from '@/assets/logo.jpeg'
-
 export const useLogo = () => {
-  const logo = logoImage
+  const logo = '/logo.jpeg'
   
   return {
     logo,

@@ -264,24 +264,19 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { useCompleteHybridService, type CompleteAnalyse } from '@/services/completeHybridService'
+import { useLaravelApi } from '@/services/laravelApiService'
 
-const {
-  getAnalyses,
-  addAnalyse,
-  updateAnalyse,
-  deleteAnalyse: deleteAnalyseService
-} = useCompleteHybridService()
+const { getAnalyses } = useLaravelApi()
 
 // État réactif
-const analyses = ref<CompleteAnalyse[]>([])
+const analyses = ref<any[]>([])
 const showModal = ref(false)
-const editingAnalyse = ref<CompleteAnalyse | null>(null)
+const editingAnalyse = ref<any | null>(null)
 const searchTerm = ref('')
 const selectedType = ref('')
 const selectedStatut = ref('')
 
-const newAnalyse = ref<Omit<CompleteAnalyse, 'id' | 'user_id'>>({
+const newAnalyse = ref<any>({
   nom: '',
   type: 'qualite',
   description: '',
@@ -326,7 +321,7 @@ const loadAnalyses = async () => {
   }
 }
 
-const openModal = (analyse?: CompleteAnalyse) => {
+const openModal = (analyse?: any) => {
   if (analyse) {
     editingAnalyse.value = analyse
     newAnalyse.value = {
@@ -389,7 +384,7 @@ const deleteAnalyse = async (id: string) => {
   if (confirm('Êtes-vous sûr de vouloir supprimer cette analyse ?')) {
     try {
       console.log('🗑️ [AnalysesView] Suppression de l\'analyse:', id)
-      await deleteAnalyseService(id)
+      await deleteAnalyseService(Number(id))
       await loadAnalyses()
       console.log('✅ [AnalysesView] Analyse supprimée')
     } catch (error) {

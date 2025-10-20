@@ -13,13 +13,13 @@
       <div class="modal-body">
         <div class="user-info">
           <div class="user-avatar">
-            {{ user.first_name.charAt(0) }}{{ user.last_name.charAt(0) }}
+            {{ user.name.charAt(0) }}
           </div>
           <div class="user-details">
-            <h3 class="user-name">{{ user.first_name }} {{ user.last_name }}</h3>
+            <h3 class="user-name">{{ user.name }}</h3>
             <p class="user-email">{{ user.email }}</p>
-            <span :class="`role-badge role-${user.role}`">
-              {{ getRoleLabel(user.role) }}
+            <span :class="`role-badge role-${user.roles?.[0]?.name || 'operator'}`">
+              {{ getRoleLabel(user.roles?.[0]?.name || 'operator') }}
             </span>
           </div>
         </div>
@@ -54,12 +54,12 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
-import { useCompleteHybridService, type CompleteUser } from '@/services/completeHybridService'
+import { useLaravelApi, type LaravelUser } from '@/services/laravelApiService'
 import { useAuth } from '@/services/auth'
 
 const props = defineProps<{
   show: boolean
-  user: CompleteUser
+  user: LaravelUser
 }>()
 
 const emit = defineEmits<{
@@ -67,7 +67,6 @@ const emit = defineEmits<{
   success: []
 }>()
 
-const { loginUser } = useCompleteHybridService()
 const { signIn } = useAuth()
 
 const temporaryPassword = ref('')
@@ -93,12 +92,14 @@ const performAutoLogin = async () => {
     console.log('🔐 [AutoLoginModal] Tentative de connexion automatique...')
     
     // Utiliser notre méthode de connexion personnalisée
-    const { loginUser } = useCompleteHybridService()
-    const result = await loginUser(props.user.email, temporaryPassword.value)
+    const { signIn } = useAuth()
+    const result = await signIn({ email: props.user.email, password: temporaryPassword.value })
     
     // Simuler la connexion en stockant les données dans localStorage
     localStorage.setItem('user', JSON.stringify(result.user))
-    localStorage.setItem('session', JSON.stringify(result.session))
+    if ((result as any).session) {
+      localStorage.setItem('session', JSON.stringify((result as any).session))
+    }
     
     console.log('✅ [AutoLoginModal] Connexion automatique réussie')
     emit('success')

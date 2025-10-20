@@ -1,7 +1,7 @@
 import type { RouteLocationNormalized } from 'vue-router'
 import { useRoles } from '../services/roles'
 // Types pour les rôles utilisateur
-export type UserRole = 'superadmin' | 'admin' | 'secretaire' | 'livreur'
+export type UserRole = 'super_admin' | 'admin' | 'manager' | 'operator'
 
 // Définition des permissions requises pour chaque route
 export const ROUTE_PERMISSIONS: Record<string, {
@@ -10,34 +10,34 @@ export const ROUTE_PERMISSIONS: Record<string, {
   redirectTo?: string
 }> = {
   '/': {
-    requiredRoles: ['superadmin', 'admin', 'secretaire', 'livreur']
+    requiredRoles: ['super_admin', 'admin', 'manager', 'operator']
   },
   '/production': {
-    requiredRoles: ['superadmin', 'admin', 'secretaire'],
+    requiredRoles: ['super_admin', 'admin', 'manager'],
     requiredPermissions: ['canViewProduction']
   },
   '/commandes': {
-    requiredRoles: ['superadmin', 'admin', 'secretaire', 'livreur'],
+    requiredRoles: ['super_admin', 'admin', 'manager', 'operator'],
     requiredPermissions: ['canViewCommandes']
   },
   '/livraison': {
-    requiredRoles: ['superadmin', 'admin', 'secretaire', 'livreur'],
+    requiredRoles: ['super_admin', 'admin', 'manager', 'operator'],
     requiredPermissions: ['canViewLivraisons']
   },
   '/stock': {
-    requiredRoles: ['superadmin', 'admin', 'secretaire'],
+    requiredRoles: ['super_admin', 'admin', 'manager'],
     requiredPermissions: ['canViewStock']
   },
   '/personnel': {
-    requiredRoles: ['superadmin', 'admin', 'secretaire'],
+    requiredRoles: ['super_admin', 'admin', 'manager'],
     requiredPermissions: ['canViewPersonnel']
   },
   '/analyses': {
-    requiredRoles: ['superadmin', 'admin', 'secretaire'],
+    requiredRoles: ['super_admin', 'admin', 'manager'],
     requiredPermissions: ['canViewAnalyses']
   },
   '/parametres': {
-    requiredRoles: ['superadmin', 'admin'],
+    requiredRoles: ['super_admin', 'admin'],
     requiredPermissions: ['canViewParametres']
   }
 }
@@ -88,7 +88,7 @@ export const checkRoutePermissions = (to: RouteLocationNormalized): {
 export const adminGuard = (to: RouteLocationNormalized) => {
   const { hasRole } = useRoles()
   
-  if (!hasRole('superadmin') && !hasRole('admin')) {
+  if (!hasRole('super_admin') && !hasRole('admin')) {
     return {
       allowed: false,
       redirectTo: '/',
@@ -103,7 +103,7 @@ export const adminGuard = (to: RouteLocationNormalized) => {
 export const userManagementGuard = (to: RouteLocationNormalized) => {
   const { hasRole } = useRoles()
   
-  if (!hasRole('superadmin')) {
+  if (!hasRole('super_admin')) {
     return {
       allowed: false,
       redirectTo: '/',

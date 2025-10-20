@@ -9,13 +9,13 @@ const router = useRouter()
 const { logo, getLogoAlt, getLogoClass } = useLogo()
 const { signIn, isLoading } = useLaravelAuth()
 
-const email = ref('')
+const phone = ref('')
 const password = ref('')
 const error = ref('')
 const success = ref('')
 
 const handleLogin = async () => {
-  if (!email.value || !password.value) {
+  if (!phone.value || !password.value) {
     error.value = 'Veuillez remplir tous les champs'
     return
   }
@@ -25,9 +25,9 @@ const handleLogin = async () => {
 
   try {
     console.log('🔐 [LoginView] Tentative de connexion')
-    console.log('📧 [LoginView] Email:', email.value)
+    console.log('📧 [LoginView] Email:', phone.value)
     
-    const result = await signIn({ email: email.value, password: password.value })
+    const result = await signIn({ email: phone.value, password: password.value })
     
     if (!result.success) {
       throw new Error(result.error || 'Erreur lors de la connexion')
@@ -67,17 +67,16 @@ const handleLogin = async () => {
         <form @submit.prevent="handleLogin" class="space-y-6">
           <div>
             <label for="email" class="block text-sm font-medium text-gray-700">
-              Adresse email
-            </label>
+Numero de telephone            </label>
             <div class="mt-1">
               <input 
-                id="email"
-                v-model="email"
-                name="email"
-                type="email"
+                id="phone"
+                v-model="phone"
+        name="Telephone"
+                type="phone"
                 required
                 class="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-lg placeholder-gray-400 focus:outline-none focus:ring-orange-500 focus:border-orange-500"
-                placeholder="Entrez votre adresse email"
+                placeholder="Entrez votre adresse Telephone"
               />
             </div>
           </div>
@@ -124,30 +123,11 @@ const handleLogin = async () => {
           </div>
         </form>
 
-        <div class="mt-6">
-          <div class="relative">
-            <div class="absolute inset-0 flex items-center">
-              <div class="w-full border-t border-gray-300" />
-            </div>
-            <div class="relative flex justify-center text-sm">
-              <span class="px-2 bg-white text-gray-500">Authentification Laravel</span>
-            </div>
-          </div>
+          
 
           <div class="mt-6 space-y-3">
-            <div class="bg-blue-50 rounded-lg p-3">
-              <p class="text-xs font-medium text-blue-700">Connexion Laravel</p>
-              <p class="text-xs text-blue-600">Utilisez vos identifiants Laravel</p>
-            </div>
-            <div class="bg-gray-50 rounded-lg p-3">
-              <p class="text-xs font-medium text-gray-700">Pas de compte ?</p>
-              <p class="text-xs text-gray-600">
-                <router-link to="/register" class="text-orange-600 hover:text-orange-500">
-                  Créer un compte
-                </router-link>
-              </p>
-            </div>
-          </div>
+             
+              
         </div>
       </div>
     </div>

@@ -103,7 +103,7 @@
       >
         <div class="flex justify-between items-start mb-4">
           <div>
-            <h3 class="text-xl font-bold text-gray-900">{{ production.lotId }}</h3>
+            <h3 class="text-xl font-bold text-gray-900">{{ production.lotId || production.lot_id }}</h3>
             <p class="text-gray-600">{{ formatDate(production.date) }}</p>
           </div>
           <div :class="['px-3 py-1 rounded-full text-sm font-medium', getStatutClass(production.statut)]">
@@ -122,7 +122,7 @@
           </div>
           <div class="flex items-center text-sm text-gray-600 mb-2">
             <CogIcon class="h-4 w-4 mr-2" />
-            <span>{{ production.articlesProduits.length }} articles</span>
+            <span>{{ production.articlesProduits?.length || 0 }} articles</span>
           </div>
           <div class="flex items-center text-sm text-gray-600">
             <CurrencyDollarIcon class="h-4 w-4 mr-2" />
@@ -131,11 +131,11 @@
         </div>
 
         <div class="mb-4">
-          <h4 class="font-semibold text-gray-900 mb-2">Articles produits ({{ production.articlesProduits.length }})</h4>
+          <h4 class="font-semibold text-gray-900 mb-2">Articles produits ({{ production.articlesProduits?.length || 0 }})</h4>
           <div class="flex flex-col">
-            <div 
-              v-for="article in production.articlesProduits" 
-              :key="article.nom"
+            <div
+              v-for="(article, index) in production.articlesProduits || []"
+              :key="article.nom || index"
               class="flex justify-between text-sm mb-1"
             >
               <span class="text-gray-900">{{ article.nom }}</span>
@@ -160,7 +160,7 @@
             Modifier
           </button>
           <button 
-            @click="handleDeleteProduction(production.id!)" 
+            @click="handleDeleteProduction(production.id)" 
             class="px-4 py-2 rounded-lg font-medium transition-colors duration-200 flex items-center bg-red-600 text-white hover:bg-red-700"
           >
             <TrashIcon class="h-4 w-4 mr-2" />
@@ -192,15 +192,7 @@
               />
             </div>
 
-            <div>
-              <label class="block text-sm font-medium text-gray-700 mb-2">ID du lot</label>
-              <input 
-                v-model="newProduction.lotId" 
-                type="text" 
-                required 
-                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-              />
-            </div>
+         
 
             <div>
               <label class="block text-sm font-medium text-gray-700 mb-2">Statut</label>
@@ -320,14 +312,14 @@ import {
   MagnifyingGlassIcon,
   CurrencyDollarIcon
 } from '@heroicons/vue/24/outline'
-import { useCompleteHybridService, type CompleteProduction } from '../services/completeHybridService'
+import { useLaravelApi, type LaravelProduction } from '../services/laravelApiService'
 
-const { getProductions, addProduction, updateProduction, deleteProduction, getArticles } = useCompleteHybridService()
+const { getProductions, addProduction, updateProduction, deleteProduction, getArticles } = useLaravelApi()
 
-const productions = ref<CompleteProduction[]>([])
+const productions = ref<LaravelProduction[]>([])
 const articlesDisponibles = ref<any[]>([])
 const showModal = ref(false)
-const editingProduction = ref<CompleteProduction | null>(null)
+const editingProduction = ref<LaravelProduction | null>(null)
 const selectedStatut = ref('')
 const selectedDate = ref('')
 const searchTerm = ref('')
@@ -356,13 +348,53 @@ const filteredProductions = computed(() => {
   if (searchTerm.value) {
     const term = searchTerm.value.toLowerCase()
     filtered = filtered.filter(p => 
-      p.lotId.toLowerCase().includes(term) ||
-      p.articlesProduits.some(article => article.nom.toLowerCase().includes(term))
+      p.articlesProduits?.some((article: any) => article.nom.toLowerCase().includes(term)) || false
     )
   }
 
   return filtered.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
 })
+
+// Fonction pour parser les notes de production
+const parseProductionNotes = (notes: string) => {
+  const defaultValues = {
+    tempsEffectif: 0,
+    rendement: 0,
+    coutProduction: 0,
+    statut: 'en_attente',
+    lotId: ''
+  }
+
+  if (!notes) return defaultValues
+
+  try {
+    // Parser le format: "Statut: termine, Temps effectif: 12h, Rendement: 10%, Lot ID: 123, Coût: 10€"
+    const parts = notes.split(', ')
+    const data: typeof defaultValues & { lotId: string } = { ...defaultValues }
+
+    parts.forEach(part => {
+      if (part.includes('Statut:')) {
+        data.statut = part.split('Statut: ')[1]?.trim() || 'en_attente'
+      } else if (part.includes('Temps effectif:')) {
+        const temps = part.split('Temps effectif: ')[1]?.replace('h', '').trim()
+        data.tempsEffectif = parseInt(temps) || 0
+      } else if (part.includes('Rendement:')) {
+        const rendement = part.split('Rendement: ')[1]?.replace('%', '').trim()
+        data.rendement = parseInt(rendement) || 0
+      } else if (part.includes('Lot ID:')) {
+        data.lotId = part.split('Lot ID: ')[1]?.trim() || ''
+      } else if (part.includes('Coût:')) {
+        const cout = part.split('Coût: ')[1]?.replace('€', '').trim()
+        data.coutProduction = parseFloat(cout) || 0
+      }
+    })
+
+    return data
+  } catch (error) {
+    console.error('Erreur lors du parsing des notes:', error)
+    return defaultValues
+  }
+}
 
 const productionsEnAttente = computed(() => productions.value.filter(p => p.statut === 'en_attente').length)
 const productionsEnCours = computed(() => productions.value.filter(p => p.statut === 'en_cours').length)
@@ -384,6 +416,7 @@ const loadArticlesDisponibles = async () => {
     console.log('🔍 [ProductionView] Chargement des articles')
     const articles = await getArticles()
     articlesDisponibles.value = articles.map(article => ({
+      id: article.id,
       nom: article.nom,
       stock: article.stock,
       unite: article.unite,
@@ -396,14 +429,14 @@ const loadArticlesDisponibles = async () => {
   }
 }
 
-const openModal = (production?: CompleteProduction) => {
+const openModal = (production?: LaravelProduction) => {
   if (production) {
     editingProduction.value = production
     newProduction.value = {
       date: production.date,
-      lotId: production.lotId,
-      statut: production.statut,
-      articlesProduits: production.articlesProduits,
+      lotId: production.lotId || production.lot_id || '',
+      statut: production.statut as 'en_attente' | 'en_cours' | 'termine' | 'annule',
+      articlesProduits: production.articlesProduits || [],
       tempsEffectif: production.tempsEffectif || 0,
       rendement: production.rendement || 0,
       coutProduction: production.coutProduction || 0
@@ -431,11 +464,32 @@ const closeModal = () => {
 const saveProduction = async () => {
   try {
     console.log('🔍 [ProductionView] Sauvegarde de la production')
-    
-    const productionData = { ...newProduction.value }
+
+    // Valider qu'il y a au moins un article sélectionné
+    if (!newProduction.value.articlesProduits || newProduction.value.articlesProduits.length === 0 || !newProduction.value.articlesProduits[0]?.nom) {
+      alert('Veuillez sélectionner au moins un article à produire')
+      return
+    }
+
+    // Trouver l'article sélectionné pour obtenir son ID
+    const selectedArticle = articlesDisponibles.value.find(art => art.nom === newProduction.value.articlesProduits[0].nom)
+    if (!selectedArticle) {
+      alert('Article sélectionné non trouvé')
+      return
+    }
+
+    // Mapper les données frontend vers le format backend
+    const productionData = {
+      product_id: selectedArticle.id,
+      quantity: newProduction.value.articlesProduits[0].quantiteProduite,
+      production_date: newProduction.value.date,
+      notes: `Statut: ${newProduction.value.statut}, Temps effectif: ${newProduction.value.tempsEffectif}h, Rendement: ${newProduction.value.rendement}%, Lot ID: ${newProduction.value.lotId}, Coût: ${newProduction.value.coutProduction}€`
+    }
+
+    console.log('🔍 [ProductionView] Données mappées:', productionData)
 
     if (editingProduction.value) {
-      await updateProduction(editingProduction.value.id!, productionData)
+      await updateProduction(editingProduction.value.id, productionData)
       console.log('✅ [ProductionView] Production mise à jour')
     } else {
       await addProduction(productionData)
@@ -451,7 +505,7 @@ const saveProduction = async () => {
   }
 }
 
-const handleDeleteProduction = async (id: string) => {
+const handleDeleteProduction = async (id: number) => {
   if (confirm('Êtes-vous sûr de vouloir supprimer cette production ?')) {
     try {
       console.log('🔍 [ProductionView] Suppression de la production:', id)

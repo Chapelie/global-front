@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { useRoles } from '../services/roles'
-import type { UserRole } from '../lib/supabase'
+import { useRoles, type UserRole } from '../services/roles'
 
 interface Props {
   requiredRoles?: UserRole[]

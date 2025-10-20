@@ -4,13 +4,30 @@
  */
 
 import { ref, computed } from 'vue'
+import { mapCommandeData, mapLivraisonData, mapProductionData, mapArticleData, mapArrayData } from '../utils/dataMapper'
 
 // Types Laravel
 interface LaravelUser {
   id: number
   name: string
   email: string
-  role: string
+  phone?: string
+  department?: string
+  position?: string
+  first_name?: string
+  last_name?: string
+  role?: string
+  actif?: boolean
+  user_metadata?: {
+    full_name?: string
+    department?: string
+    [key: string]: any
+  }
+  roles: Array<{
+    id: number
+    name: string
+    display_name?: string
+  }>
   created_at: string
   updated_at: string
 }
@@ -18,7 +35,6 @@ interface LaravelUser {
 interface LaravelArticle {
   id: number
   nom: string
-  categorie: string
   stock: number
   seuil_critique: number
   unite: string
@@ -40,7 +56,6 @@ interface LaravelArticle {
 interface LaravelConsommable {
   id: number
   nom: string
-  categorie: string
   stock: number
   seuil_critique: number
   unite: string
@@ -58,6 +73,7 @@ interface LaravelConsommable {
 interface LaravelCommande {
   id: number
   numero_commande: string
+  numeroCommande?: string
   date: string
   client: string
   telephone: string
@@ -69,6 +85,11 @@ interface LaravelCommande {
   total_livraisons: number
   total_restant: number
   user_id: number
+  produits: Array<{
+    nom: string
+    quantite: number
+    unite: string
+  }>
   created_at: string
   updated_at: string
 }
@@ -76,6 +97,7 @@ interface LaravelCommande {
 interface LaravelLivraison {
   id: number
   numero_bl: string
+  numeroBl?: string
   date: string
   client: string
   telephone: string
@@ -83,17 +105,37 @@ interface LaravelLivraison {
   statut: string
   adresse: string
   code_suivi?: string
+  codeSuivi?: string
   preuve_depot?: string
+  preuveDepot?: string
   preuve_reception?: string
+  preuveReception?: string
   signature_client?: string
+  signatureClient?: string
+  signatureChauffeur?: string
   observations?: string
+  notes?: string
   heure_livraison?: string
+  heureLivraison?: string
   date_livraison?: string
   total_commande: number
   total_livraison: number
   difference_totale: number
   reste_a_payer_total: number
   user_id: number
+  produits: Array<{
+    nom: string
+    quantite: number
+    unite: string
+    quantite_commandee: number
+    quantiteCommandee?: number
+    quantite_livree: number
+    quantiteLivree?: number
+    difference: number
+    reste_a_payer: number
+    resteAPayer?: number
+    notes?: string
+  }>
   created_at: string
   updated_at: string
 }
@@ -103,15 +145,44 @@ interface LaravelProduction {
   date: string
   statut: string
   lot_id?: string
+  lotId?: string
   heure_debut?: string
   heure_fin?: string
   user_id: number
   created_at: string
   updated_at: string
+  // Propriétés étendues pour compatibilité
+  articlesProduits?: Array<{
+    nom: string
+    quantiteProduite: number
+    unite: string
+  }>
+  tempsEffectif?: number
+  rendement?: number
+  coutProduction?: number
+  notes?: string
+}
+
+interface LaravelDocument {
+  id: number
+  titre: string
+  type: string
+  numero: string
+  chemin_fichier: string
+  date_creation: string
+  cree_par?: number
+  donnees_document?: any
+  statut: string
+  createur?: LaravelUser
+  file_url: string
+  file_size: string
+  formatted_date_creation: string
+  created_at: string
+  updated_at: string
 }
 
 class LaravelApiService {
-  private baseURL = 'http://localhost:8000/api'
+  private baseURL = 'http://109.123.249.170/api'
   private token = ref<string | null>(localStorage.getItem('token'))
 
   constructor() {
@@ -194,17 +265,20 @@ class LaravelApiService {
   isAuthenticated = computed(() => !!this.token.value)
 
   // ===== ARTICLES =====
-  async getArticles(): Promise<LaravelArticle[]> {
+  getArticles = async (): Promise<LaravelArticle[]> => {
     try {
       const response = await this.get<{ data: LaravelArticle[] }>('/articles')
-      return response.data || []
+      console.log('🔍 [LaravelApiService] Réponse articles brute:', response)
+      const mappedData = mapArrayData(response.data || [], mapArticleData)
+      console.log('✅ [LaravelApiService] Articles mappés:', mappedData)
+      return mappedData
     } catch (error) {
       console.error('Erreur lors de la récupération des articles:', error)
       return []
     }
   }
 
-  async getArticle(id: number): Promise<LaravelArticle | null> {
+  getArticle = async (id: number): Promise<LaravelArticle | null> => {
     try {
       const response = await this.get<{ data: LaravelArticle }>(`/articles/${id}`)
       return response.data || null
@@ -214,7 +288,7 @@ class LaravelApiService {
     }
   }
 
-  async addArticle(articleData: Partial<LaravelArticle>): Promise<LaravelArticle | null> {
+  addArticle = async (articleData: Partial<LaravelArticle>): Promise<LaravelArticle | null> => {
     try {
       const response = await this.post<{ data: LaravelArticle }>('/articles', articleData)
       return response.data || null
@@ -224,7 +298,7 @@ class LaravelApiService {
     }
   }
 
-  async updateArticle(id: number, articleData: Partial<LaravelArticle>): Promise<LaravelArticle | null> {
+  updateArticle = async (id: number, articleData: Partial<LaravelArticle>): Promise<LaravelArticle | null> => {
     try {
       const response = await this.put<{ data: LaravelArticle }>(`/articles/${id}`, articleData)
       return response.data || null
@@ -234,7 +308,7 @@ class LaravelApiService {
     }
   }
 
-  async deleteArticle(id: number): Promise<boolean> {
+  deleteArticle = async (id: number): Promise<boolean> => {
     try {
       await this.delete(`/articles/${id}`)
       return true
@@ -282,6 +356,8 @@ class LaravelApiService {
       return []
     }
   }
+
+
 
   // ===== CONSOMMABLES =====
   async getConsommables(): Promise<LaravelConsommable[]> {
@@ -384,19 +460,22 @@ class LaravelApiService {
   }
 
   // ===== COMMANDES =====
-  async getCommandes(): Promise<LaravelCommande[]> {
+  getCommandes = async (): Promise<LaravelCommande[]> => {
     try {
-      const response = await this.get<{ data: LaravelCommande[] }>('/commandes')
-      return response.data || []
+      const response = await this.get<LaravelCommande[]>('/orders')
+      console.log('🔍 [LaravelApiService] Réponse commandes brute:', response)
+      const mappedData = mapArrayData(response || [], mapCommandeData)
+      console.log('✅ [LaravelApiService] Commandes mappées:', mappedData)
+      return mappedData
     } catch (error) {
       console.error('Erreur lors de la récupération des commandes:', error)
       return []
     }
   }
 
-  async getCommande(id: number): Promise<LaravelCommande | null> {
+  getCommande = async (id: number): Promise<LaravelCommande | null> => {
     try {
-      const response = await this.get<{ data: LaravelCommande }>(`/commandes/${id}`)
+      const response = await this.get<{ data: LaravelCommande }>(`/orders/${id}`)
       return response.data || null
     } catch (error) {
       console.error(`Erreur lors de la récupération de la commande ${id}:`, error)
@@ -404,19 +483,19 @@ class LaravelApiService {
     }
   }
 
-  async addCommande(commandeData: Partial<LaravelCommande>): Promise<LaravelCommande | null> {
+  addCommande = async (commandeData: Partial<LaravelCommande>): Promise<LaravelCommande | null> => {
     try {
-      const response = await this.post<{ data: LaravelCommande }>('/commandes', commandeData)
-      return response.data || null
+      const response = await this.post<LaravelCommande>('/orders', commandeData)
+      return response || null
     } catch (error) {
       console.error('Erreur lors de l\'ajout de la commande:', error)
       throw error
     }
   }
 
-  async updateCommande(id: number, commandeData: Partial<LaravelCommande>): Promise<LaravelCommande | null> {
+  updateCommande = async (id: number, commandeData: Partial<LaravelCommande>): Promise<LaravelCommande | null> => {
     try {
-      const response = await this.put<{ data: LaravelCommande }>(`/commandes/${id}`, commandeData)
+      const response = await this.put<{ data: LaravelCommande }>(`/orders/${id}`, commandeData)
       return response.data || null
     } catch (error) {
       console.error(`Erreur lors de la mise à jour de la commande ${id}:`, error)
@@ -424,9 +503,9 @@ class LaravelApiService {
     }
   }
 
-  async deleteCommande(id: number): Promise<boolean> {
+  deleteCommande = async (id: number): Promise<boolean> => {
     try {
-      await this.delete(`/commandes/${id}`)
+      await this.delete(`/orders/${id}`)
       return true
     } catch (error) {
       console.error(`Erreur lors de la suppression de la commande ${id}:`, error)
@@ -436,7 +515,7 @@ class LaravelApiService {
 
   async getCommandesStats(): Promise<any> {
     try {
-      return await this.get('/commandes/stats')
+      return await this.get('/orders/stats')
     } catch (error) {
       console.error('Erreur lors de la récupération des statistiques des commandes:', error)
       return {}
@@ -444,19 +523,22 @@ class LaravelApiService {
   }
 
   // ===== LIVRAISONS =====
-  async getLivraisons(): Promise<LaravelLivraison[]> {
+  getLivraisons = async (): Promise<LaravelLivraison[]> => {
     try {
-      const response = await this.get<{ data: LaravelLivraison[] }>('/livraisons')
-      return response.data || []
+      const response = await this.get<LaravelLivraison[]>('/storage/livraisons')
+      console.log('🔍 [LaravelApiService] Réponse livraisons brute:', response)
+      const mappedData = mapArrayData(response || [], mapLivraisonData)
+      console.log('✅ [LaravelApiService] Livraisons mappées:', mappedData)
+      return mappedData
     } catch (error) {
       console.error('Erreur lors de la récupération des livraisons:', error)
       return []
     }
   }
 
-  async getLivraison(id: number): Promise<LaravelLivraison | null> {
+  getLivraison = async (id: number): Promise<LaravelLivraison | null> => {
     try {
-      const response = await this.get<{ data: LaravelLivraison }>(`/livraisons/${id}`)
+      const response = await this.get<{ data: LaravelLivraison }>(`/deliveries/${id}`)
       return response.data || null
     } catch (error) {
       console.error(`Erreur lors de la récupération de la livraison ${id}:`, error)
@@ -464,29 +546,29 @@ class LaravelApiService {
     }
   }
 
-  async addLivraison(livraisonData: Partial<LaravelLivraison>): Promise<LaravelLivraison | null> {
+  addLivraison = async (livraisonData: Partial<LaravelLivraison>): Promise<LaravelLivraison | null> => {
     try {
-      const response = await this.post<{ data: LaravelLivraison }>('/livraisons', livraisonData)
-      return response.data || null
+      const response = await this.post<LaravelLivraison>('/storage/livraisons/add', livraisonData)
+      return response || null
     } catch (error) {
       console.error('Erreur lors de l\'ajout de la livraison:', error)
       throw error
     }
   }
 
-  async updateLivraison(id: number, livraisonData: Partial<LaravelLivraison>): Promise<LaravelLivraison | null> {
+  updateLivraison = async (id: number, livraisonData: Partial<LaravelLivraison>): Promise<LaravelLivraison | null> => {
     try {
-      const response = await this.put<{ data: LaravelLivraison }>(`/livraisons/${id}`, livraisonData)
-      return response.data || null
+      const response = await this.put<LaravelLivraison>(`/storage/livraisons/${id}`, livraisonData)
+      return response || null
     } catch (error) {
       console.error(`Erreur lors de la mise à jour de la livraison ${id}:`, error)
       throw error
     }
   }
 
-  async deleteLivraison(id: number): Promise<boolean> {
+  deleteLivraison = async (id: number): Promise<boolean> => {
     try {
-      await this.delete(`/livraisons/${id}`)
+      await this.delete(`/storage/livraisons/${id}`)
       return true
     } catch (error) {
       console.error(`Erreur lors de la suppression de la livraison ${id}:`, error)
@@ -494,29 +576,65 @@ class LaravelApiService {
     }
   }
 
-  async getLivraisonsStats(): Promise<any> {
+  getLivraisonsStats = async (): Promise<any> => {
     try {
-      return await this.get('/livraisons/stats')
+      return await this.get('/deliveries/stats')
     } catch (error) {
       console.error('Erreur lors de la récupération des statistiques des livraisons:', error)
       return {}
     }
   }
 
-  // ===== PRODUCTIONS =====
-  async getProductions(): Promise<LaravelProduction[]> {
+  // Mettre à jour les quantités livrées
+  mettreAJourQuantitesLivrees = async (id: number, data: { quantites_livrees: Array<{ nom: string, quantite: number }> }): Promise<LaravelLivraison | null> => {
     try {
-      const response = await this.get<{ data: LaravelProduction[] }>('/productions')
-      return response.data || []
+      const response = await this.put<LaravelLivraison>(`/storage/livraisons/${id}/quantites-livrees`, data)
+      return response
+    } catch (error) {
+      console.error(`Erreur lors de la mise à jour des quantités livrées ${id}:`, error)
+      return null
+    }
+  }
+
+  // Finaliser une livraison avec signature
+  finaliserLivraisonAvecSignature = async (id: number, data: { signature_client: string, observations?: string }): Promise<LaravelLivraison | null> => {
+    try {
+      const response = await this.post<LaravelLivraison>(`/storage/livraisons/${id}/finaliser-avec-signature`, data)
+      return response
+    } catch (error) {
+      console.error(`Erreur lors de la finalisation de la livraison ${id}:`, error)
+      return null
+    }
+  }
+
+  // Commencer une livraison
+  commencerLivraisonAPI = async (id: number): Promise<LaravelLivraison | null> => {
+    try {
+      const response = await this.post<LaravelLivraison>(`/storage/livraisons/${id}/commencer`, {})
+      return response
+    } catch (error) {
+      console.error(`Erreur lors du commencement de la livraison ${id}:`, error)
+      return null
+    }
+  }
+
+  // ===== PRODUCTIONS =====
+  getProductions = async (): Promise<LaravelProduction[]> => {
+    try {
+      const response = await this.get<{ data: LaravelProduction[] }>('/production/batches')
+      console.log('🔍 [LaravelApiService] Réponse productions brute:', response)
+      const mappedData = mapArrayData(response.data || [], mapProductionData)
+      console.log('✅ [LaravelApiService] Productions mappées:', mappedData)
+      return mappedData
     } catch (error) {
       console.error('Erreur lors de la récupération des productions:', error)
       return []
     }
   }
 
-  async getProduction(id: number): Promise<LaravelProduction | null> {
+  getProduction = async (id: number): Promise<LaravelProduction | null> => {
     try {
-      const response = await this.get<{ data: LaravelProduction }>(`/productions/${id}`)
+      const response = await this.get<{ data: LaravelProduction }>(`/production/batches/${id}`)
       return response.data || null
     } catch (error) {
       console.error(`Erreur lors de la récupération de la production ${id}:`, error)
@@ -524,9 +642,9 @@ class LaravelApiService {
     }
   }
 
-  async addProduction(productionData: Partial<LaravelProduction>): Promise<LaravelProduction | null> {
+  addProduction = async (productionData: Partial<LaravelProduction>): Promise<LaravelProduction | null> => {
     try {
-      const response = await this.post<{ data: LaravelProduction }>('/productions', productionData)
+      const response = await this.post<{ data: LaravelProduction }>('/production/batches', productionData)
       return response.data || null
     } catch (error) {
       console.error('Erreur lors de l\'ajout de la production:', error)
@@ -534,9 +652,9 @@ class LaravelApiService {
     }
   }
 
-  async updateProduction(id: number, productionData: Partial<LaravelProduction>): Promise<LaravelProduction | null> {
+  updateProduction = async (id: number, productionData: Partial<LaravelProduction>): Promise<LaravelProduction | null> => {
     try {
-      const response = await this.put<{ data: LaravelProduction }>(`/productions/${id}`, productionData)
+      const response = await this.put<{ data: LaravelProduction }>(`/production/batches/${id}`, productionData)
       return response.data || null
     } catch (error) {
       console.error(`Erreur lors de la mise à jour de la production ${id}:`, error)
@@ -544,9 +662,9 @@ class LaravelApiService {
     }
   }
 
-  async deleteProduction(id: number): Promise<boolean> {
+  deleteProduction = async (id: number): Promise<boolean> => {
     try {
-      await this.delete(`/productions/${id}`)
+      await this.delete(`/production/batches/${id}`)
       return true
     } catch (error) {
       console.error(`Erreur lors de la suppression de la production ${id}:`, error)
@@ -554,17 +672,152 @@ class LaravelApiService {
     }
   }
 
-  async getProductionsStats(): Promise<any> {
+  getProductionsStats = async (): Promise<any> => {
     try {
-      return await this.get('/productions/stats')
+      return await this.get('/production/batches/stats')
     } catch (error) {
       console.error('Erreur lors de la récupération des statistiques des productions:', error)
       return {}
     }
   }
 
+  // ===== UTILISATEURS =====
+  getUsers = async (): Promise<LaravelUser[]> => {
+    try {
+      const response = await this.get<{ data: LaravelUser[] }>('/users')
+      return response.data || []
+    } catch (error) {
+      console.error('Erreur lors de la récupération des utilisateurs:', error)
+      return []
+    }
+  }
+
+  createUser = async (userData: Omit<LaravelUser, 'id' | 'created_at' | 'updated_at'> & { password: string }): Promise<LaravelUser | null> => {
+    try {
+      const response = await this.post<{ data: LaravelUser }>('/users', userData)
+      return response.data || null
+    } catch (error) {
+      console.error('Erreur lors de la création de l\'utilisateur:', error)
+      throw error
+    }
+  }
+
+  updateUser = async (id: number, userData: Partial<LaravelUser>): Promise<LaravelUser | null> => {
+    try {
+      const response = await this.put<{ data: LaravelUser }>(`/users/${id}`, userData)
+      return response.data || null
+    } catch (error) {
+      console.error('Erreur lors de la mise à jour de l\'utilisateur:', error)
+      throw error
+    }
+  }
+
+  deleteUser = async (id: number): Promise<boolean> => {
+    try {
+      await this.delete(`/users/${id}`)
+      return true
+    } catch (error) {
+      console.error('Erreur lors de la suppression de l\'utilisateur:', error)
+      return false
+    }
+  }
+
+  // ===== DOCUMENTS =====
+  getDocuments = async (): Promise<LaravelDocument[]> => {
+    try {
+      const response = await this.get<{ data: LaravelDocument[] }>('/documents')
+      return response.data || []
+    } catch (error) {
+      console.error('Erreur lors de la récupération des documents:', error)
+      return []
+    }
+  }
+
+  getDocument = async (id: number): Promise<LaravelDocument | null> => {
+    try {
+      const response = await this.get<{ data: LaravelDocument }>(`/documents/${id}`)
+      return response.data || null
+    } catch (error) {
+      console.error(`Erreur lors de la récupération du document ${id}:`, error)
+      return null
+    }
+  }
+
+  generateDeliveryNote = async (data: any): Promise<LaravelDocument | null> => {
+    try {
+      const response = await this.post<{ data: LaravelDocument }>('/documents/delivery-note', data)
+      return response.data || null
+    } catch (error) {
+      console.error('Erreur lors de la génération du bordereau de livraison:', error)
+      throw error
+    }
+  }
+
+  generateInvoice = async (data: any): Promise<LaravelDocument | null> => {
+    try {
+      const response = await this.post<{ data: LaravelDocument }>('/documents/invoice', data)
+      return response.data || null
+    } catch (error) {
+      console.error('Erreur lors de la génération de la facture:', error)
+      throw error
+    }
+  }
+
+  downloadDocument = async (id: number): Promise<void> => {
+    try {
+      const response = await fetch(`${this.baseURL}/documents/${id}/download`, {
+        headers: this.getHeaders()
+      })
+
+      if (!response.ok) throw new Error('Erreur lors du téléchargement')
+
+      const blob = await response.blob()
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `document-${id}.pdf`
+      document.body.appendChild(a)
+      a.click()
+      window.URL.revokeObjectURL(url)
+      document.body.removeChild(a)
+    } catch (error) {
+      console.error(`Erreur lors du téléchargement du document ${id}:`, error)
+      throw error
+    }
+  }
+
+  archiveDocument = async (id: number): Promise<boolean> => {
+    try {
+      await this.patch(`/documents/${id}/archive`, {})
+      return true
+    } catch (error) {
+      console.error(`Erreur lors de l'archivage du document ${id}:`, error)
+      return false
+    }
+  }
+
+  deleteDocument = async (id: number): Promise<boolean> => {
+    try {
+      await this.delete(`/documents/${id}`)
+      return true
+    } catch (error) {
+      console.error(`Erreur lors de la suppression du document ${id}:`, error)
+      return false
+    }
+  }
+
+  getDocumentTypes = async (): Promise<{ value: string; label: string }[]> => {
+    try {
+      const response = await this.get<{ data: { value: string; label: string }[] }>('/documents/types')
+      return response.data || []
+    } catch (error) {
+      console.error('Erreur lors de la récupération des types de documents:', error)
+      return []
+    }
+  }
+
   // ===== DASHBOARD & STATISTIQUES =====
-  async getDashboardStats(): Promise<any> {
+  getDashboardStats = async (): Promise<any> => {
     try {
       const [articlesStats, consommablesStats, commandesStats, livraisonsStats, productionsStats] = await Promise.all([
         this.getArticlesStats(),
@@ -616,7 +869,7 @@ class LaravelApiService {
     }
   }
 
-  async getProductionsDuJour(): Promise<LaravelProduction[]> {
+  getProductionsDuJour = async (): Promise<LaravelProduction[]> => {
     try {
       const today = new Date().toISOString().split('T')[0]
       const response = await this.get<{ data: LaravelProduction[] }>(`/productions?date=${today}`)
@@ -624,6 +877,27 @@ class LaravelApiService {
     } catch (error) {
       console.error('Erreur lors de la récupération des productions du jour:', error)
       return []
+    }
+  }
+
+  // Méthodes manquantes pour compatibilité
+  getAnalyses = async (): Promise<any[]> => {
+    try {
+      const response = await this.get<{ data: any[] }>('/analyses')
+      return response.data || []
+    } catch (error) {
+      console.error('Erreur lors de la récupération des analyses:', error)
+      return []
+    }
+  }
+
+  addDocument = async (data: any): Promise<any> => {
+    try {
+      const response = await this.post<{ data: any }>('/documents', data)
+      return response.data || null
+    } catch (error) {
+      console.error('Erreur lors de l\'ajout du document:', error)
+      throw error
     }
   }
 }
@@ -646,5 +920,6 @@ export type {
   LaravelConsommable,
   LaravelCommande,
   LaravelLivraison,
-  LaravelProduction
+  LaravelProduction,
+  LaravelDocument
 }

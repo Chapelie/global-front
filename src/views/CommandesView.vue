@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { useCompleteLaravelService, type CompleteCommande } from '../services/completeLaravelService'
+import { useLaravelApi, type LaravelCommande, type LaravelArticle } from '../services/laravelApiService'
+import type { CompleteCommande } from '../types/global'
 import {
   PlusIcon,
   PencilIcon,
@@ -18,10 +19,10 @@ import {
   ArrowDownIcon
 } from '@heroicons/vue/24/outline'
 
-const { getCommandes, addCommande, updateCommande, deleteCommande } = useCompleteLaravelService()
-const commandes = ref<CompleteCommande[]>([])
+const { getCommandes, addCommande, updateCommande, deleteCommande, getArticles, addLivraison } = useLaravelApi()
+const commandes = ref<LaravelCommande[]>([])
 const showModal = ref(false)
-const editingCommande = ref<CompleteCommande | null>(null)
+const editingCommande = ref<LaravelCommande | null>(null)
 const selectedDate = ref('')
 const selectedStatut = ref('')
 const selectedStatutLivraison = ref('')
@@ -48,10 +49,10 @@ const newCommande = ref({
   telephone: '',
   adresse: '',
   produits: [{ nom: '', quantite: 0, unite: 'pièces' }],
-  statut: 'en_attente' as 'en_attente' | 'confirmee' | 'en_preparation' | 'livree' | 'annulee',
-  numeroCommande: '',
+  statut: 'en_attente' as 'en_attente' | 'confirmee' | 'en_preparation' | 'pret' | 'livree' | 'annulee',
+  numero_commande: '',
   date: new Date().toISOString().split('T')[0],
-  dateLivraisonSouhaitee: '' as string | undefined,
+      date_livraison_souhaitee: '' as string | undefined,
   priorite: 'normale' as 'basse' | 'normale' | 'haute' | 'urgente'
 })
 
@@ -59,6 +60,7 @@ const statuts = [
   { value: 'en_attente', label: 'En attente', color: 'bg-yellow-100 text-yellow-800', icon: ClockIcon },
   { value: 'confirmee', label: 'Confirmée', color: 'bg-blue-100 text-blue-800', icon: CheckCircleIcon },
   { value: 'en_preparation', label: 'En préparation', color: 'bg-orange-100 text-orange-800', icon: ShoppingCartIcon },
+  { value: 'pret', label: 'Prêt', color: 'bg-purple-100 text-purple-800', icon: DocumentTextIcon },
   { value: 'livree', label: 'Livrée', color: 'bg-green-100 text-green-800', icon: TruckIcon },
   { value: 'annulee', label: 'Annulée', color: 'bg-red-100 text-red-800', icon: ExclamationTriangleIcon }
 ]
@@ -75,7 +77,7 @@ const produitsDisponibles = ref<any[]>([])
 
 const loadProduitsDisponibles = async () => {
   try {
-    const { getArticles } = useCompleteHybridService()
+    const { getArticles } = useLaravelApi()
     const articles = await getArticles()
     produitsDisponibles.value = articles.map(article => ({
       nom: article.nom,
@@ -96,12 +98,14 @@ const priorites = [
   { value: 'urgente', label: 'Urgente', color: 'bg-red-100 text-red-800' }
 ]
 
-const openModal = (commande?: CompleteCommande) => {
+const openModal = (commande?: LaravelCommande) => {
   if (commande) {
     editingCommande.value = commande
     newCommande.value = { 
       ...commande,
-      dateLivraisonSouhaitee: commande.dateLivraisonSouhaitee || '' // Assurer que dateLivraisonSouhaitee n'est jamais undefined
+      statut: commande.statut as "en_attente" | "confirmee" | "livree" | "en_preparation" | "annulee",
+      priorite: commande.priorite as "normale" | "urgente" | "basse" | "haute",
+      date_livraison_souhaitee: commande.date_livraison_souhaitee || '' // Assurer que dateLivraisonSouhaitee n'est jamais undefined
     }
   } else {
     editingCommande.value = null
@@ -110,10 +114,10 @@ const openModal = (commande?: CompleteCommande) => {
       telephone: '',
       adresse: '',
       produits: [{ nom: '', quantite: 0, unite: 'pièces' }],
-      statut: 'en_attente' as 'en_attente' | 'confirmee' | 'en_preparation' | 'livree' | 'annulee',
-      numeroCommande: `CMD-${Date.now()}`,
+      statut: 'en_attente' as 'en_attente' | 'confirmee' | 'en_preparation' | 'pret' | 'livree' | 'annulee',
+      numero_commande: `CMD-${Date.now()}`,
       date: new Date().toISOString().split('T')[0],
-      dateLivraisonSouhaitee: '',
+      date_livraison_souhaitee: '',
       priorite: 'normale' as 'basse' | 'normale' | 'haute' | 'urgente'
     }
   }
@@ -132,12 +136,12 @@ const saveCommande = async () => {
     const commandeData = {
       ...newCommande.value,
       produits: produitsValides,
-      numeroCommande: newCommande.value.numeroCommande || `CMD-${Date.now()}`,
+      numero_commande: newCommande.value.numero_commande || `CMD-${Date.now()}`,
       date: newCommande.value.date || new Date().toISOString().split('T')[0]
     }
 
     if (editingCommande.value) {
-      await updateCommande(editingCommande.value.id!, commandeData)
+      await updateCommande(editingCommande.value.id, commandeData)
       console.log('✅ [CommandesView] Commande mise à jour')
     } else {
       await addCommande(commandeData)
@@ -170,7 +174,7 @@ const getStatutLivraisonIcon = (statut: string) => {
   return statutLivraison ? statutLivraison.icon : ClockIcon
 }
 
-const handleDeleteCommande = async (id: string) => {
+const handleDeleteCommande = async (id: number) => {
   if (confirm('Êtes-vous sûr de vouloir supprimer cette commande ?')) {
     try {
       console.log('🔍 [CommandesView] Suppression de la commande:', id)
@@ -189,7 +193,7 @@ const confirmerCommande = async (commande: CompleteCommande) => {
   const stock = produitsDisponibles.value
   const produitsIndisponibles: string[] = []
 
-  commande.produits.forEach(produit => {
+  commande.produits.forEach((produit: { nom: string; quantite: number; unite: string }) => {
     const articleStock = stock.find(article => article.nom === produit.nom)
     if (!articleStock) {
       produitsIndisponibles.push(`${produit.nom} (article inexistant)`)
@@ -204,12 +208,47 @@ const confirmerCommande = async (commande: CompleteCommande) => {
   }
 
   try {
+    console.log('🔍 [CommandesView] Confirmation de la commande:', commande.numero_commande)
+
+    // 1. Confirmer la commande
     await updateCommande(commande.id!, { statut: 'confirmee' })
+    console.log('✅ [CommandesView] Commande confirmée')
+
+    // 2. Créer automatiquement la livraison
+    console.log('🔍 [CommandesView] Création automatique de la livraison...')
+    const livraisonData = {
+      numero_bl: `BL-${Date.now()}`,
+      date: new Date().toISOString().split('T')[0],
+      client: commande.client,
+      telephone: commande.telephone,
+      chauffeur: '', // À assigner plus tard
+      produits: commande.produits.map((p: { nom: string; quantite: number; unite: string }) => ({
+        nom: p.nom,
+        quantite: p.quantite,
+        unite: p.unite,
+        quantite_commandee: p.quantite,
+        quantite_livree: 0,
+        difference: p.quantite,
+        reste_a_payer: 0,
+        notes: ''
+      })),
+      statut: 'en_attente' as const,
+      adresse: commande.adresse,
+      code_suivi: `CS-${Date.now()}`,
+      total_commande: 0,
+      total_livraison: 0,
+      difference_totale: 0,
+      reste_a_payer_total: 0
+    }
+
+    const livraisonCreee = await addLivraison(livraisonData)
+    console.log('✅ [CommandesView] Livraison créée automatiquement:', livraisonCreee)
+
     await loadCommandes()
-    alert('Commande confirmée avec succès!')
+    alert(`Commande confirmée avec succès!\nLivraison ${livraisonData.numero_bl} créée automatiquement.`)
   } catch (error) {
-    console.error('Erreur lors de la confirmation:', error)
-    alert('Erreur lors de la confirmation de la commande')
+    console.error('❌ [CommandesView] Erreur lors de la confirmation:', error)
+    alert('Erreur lors de la confirmation de la commande ou création de la livraison')
   }
 }
 
@@ -223,7 +262,7 @@ const preparerCommande = async (commande: CompleteCommande) => {
   const stock = produitsDisponibles.value
   const produitsIndisponibles: string[] = []
 
-  commande.produits.forEach(produit => {
+  commande.produits.forEach((produit: { nom: string; quantite: number; unite: string }) => {
     const articleStock = stock.find(article => article.nom === produit.nom)
     if (!articleStock) {
       produitsIndisponibles.push(`${produit.nom} (article inexistant)`)
@@ -247,6 +286,52 @@ const preparerCommande = async (commande: CompleteCommande) => {
   }
 }
 
+const marquerPret = async (commande: CompleteCommande) => {
+  // Vérifier le stock avant de marquer comme prêt
+  const stock = produitsDisponibles.value
+  const produitsIndisponibles: string[] = []
+
+  commande.produits.forEach((produit: { nom: string; quantite: number; unite: string }) => {
+    const articleStock = stock.find(article => article.nom === produit.nom)
+    if (!articleStock) {
+      produitsIndisponibles.push(`${produit.nom} (article inexistant)`)
+    } else if (articleStock.stock < produit.quantite) {
+      produitsIndisponibles.push(`${produit.nom} (stock: ${articleStock.stock}, demandé: ${produit.quantite})`)
+    }
+  })
+
+  if (produitsIndisponibles.length > 0) {
+    alert(`Impossible de marquer la commande comme prête. Stock insuffisant pour:\n${produitsIndisponibles.join('\n')}`)
+    return
+  }
+
+  try {
+    console.log('🔍 [CommandesView] Marquage de la commande comme prête:', commande.numero_commande)
+
+    // Utiliser l'endpoint backend qui gère automatiquement la création de livraison
+    const response = await fetch(`http://localhost:8000/api/storage/commandes/${commande.id}/marquer-pret`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    })
+
+    if (!response.ok) {
+      const errorData = await response.json()
+      throw new Error(errorData.error || 'Erreur lors du marquage comme prêt')
+    }
+
+    const result = await response.json()
+    console.log('✅ [CommandesView] Commande marquée comme prête et livraison créée:', result)
+
+    await loadCommandes()
+    alert(result.message || 'Commande marquée comme prête et livraison créée automatiquement!')
+  } catch (error) {
+    console.error('❌ [CommandesView] Erreur lors du marquage comme prêt:', error)
+    alert('Erreur lors du marquage de la commande comme prête: ' + (error as Error).message)
+  }
+}
+
 const creerLivraison = async (commande: CompleteCommande) => {
   // Créer une livraison automatiquement à partir de la commande
   const livraison = {
@@ -255,7 +340,7 @@ const creerLivraison = async (commande: CompleteCommande) => {
     client: commande.client,
     telephone: commande.telephone,
     chauffeur: '', // À assigner par le manager
-    produits: commande.produits.map(p => ({
+    produits: commande.produits.map((p: { nom: string; quantite: number; unite: string }) => ({
       nom: p.nom,
       quantite: p.quantite,
       unite: p.unite,
@@ -276,9 +361,9 @@ const creerLivraison = async (commande: CompleteCommande) => {
   try {
     // Note: Pour l'instant, on ne peut que marquer la commande comme livrée
     // La création de livraison nécessiterait le service de livraison
-    await updateCommande(commande.id!, { statut: 'livree' })
+    await updateCommande(commande.id, { statut: 'livree' })
     await loadCommandes()
-    alert(`Commande ${commande.numeroCommande} marquée comme livrée!`)
+    alert(`Commande ${commande.numero_commande} marquée comme livrée!`)
   } catch (error) {
     console.error('Erreur lors de la création de livraison:', error)
     alert('Erreur lors de la création de livraison')
@@ -324,6 +409,7 @@ const totalCommandes = computed(() => commandes.value.length)
 const commandesEnAttente = computed(() => commandes.value.filter(c => c.statut === 'en_attente').length)
 const commandesConfirmees = computed(() => commandes.value.filter(c => c.statut === 'confirmee').length)
 const commandesEnPreparation = computed(() => commandes.value.filter(c => c.statut === 'en_preparation').length)
+const commandesPrets = computed(() => commandes.value.filter(c => c.statut === 'pret').length)
 
 // Statistiques des états de livraison
 // Note: Ces propriétés n'existent pas dans CompleteCommande
@@ -525,7 +611,7 @@ const commandesLivrees = computed(() => 0)
                     <component :is="getStatutInfo(commande.statut).icon" class="h-5 w-5 text-white" />
                   </div>
                   <div>
-                    <h4 class="commande-title">{{ commande.numeroCommande }}</h4>
+                    <h4 class="commande-title">{{ commande.numero_commande }}</h4>
                     <p class="commande-client">{{ commande.client }}</p>
                   </div>
                 </div>
@@ -554,7 +640,7 @@ const commandesLivrees = computed(() => 0)
               </div>
               <div>
                 <p class="text-sm font-medium text-gray-700">Livraison souhaitée</p>
-                <p class="text-sm text-gray-900">{{ commande.dateLivraisonSouhaitee ? new Date(commande.dateLivraisonSouhaitee).toLocaleDateString('fr-FR') : 'Non spécifiée' }}</p>
+                <p class="text-sm text-gray-900">{{ commande.date_livraison_souhaitee ? new Date(commande.date_livraison_souhaitee).toLocaleDateString('fr-FR') : 'Non spécifiée' }}</p>
               </div>
               <div>
                 <p class="text-sm font-medium text-gray-700">Téléphone</p>
@@ -633,7 +719,7 @@ const commandesLivrees = computed(() => 0)
             <div class="actions-grid">
               <button
                 v-if="commande.statut === 'en_attente'"
-                @click="confirmerCommande(commande)"
+                @click="confirmerCommande(commande as CompleteCommande)"
                 class="action-btn action-btn-primary"
               >
                 <CheckCircleIcon class="h-4 w-4 mr-2" />
@@ -641,7 +727,7 @@ const commandesLivrees = computed(() => 0)
               </button>
               <button
                 v-if="commande.statut === 'confirmee'"
-                @click="preparerCommande(commande)"
+                @click="preparerCommande(commande as CompleteCommande)"
                 class="action-btn action-btn-orange"
               >
                 <ShoppingCartIcon class="h-4 w-4 mr-2" />
@@ -649,11 +735,11 @@ const commandesLivrees = computed(() => 0)
               </button>
               <button
                 v-if="commande.statut === 'en_preparation'"
-                @click="creerLivraison(commande)"
-                class="action-btn action-btn-success"
+                @click="marquerPret(commande as CompleteCommande)"
+                class="action-btn action-btn-purple"
               >
-                <TruckIcon class="h-4 w-4 mr-2" />
-                Créer livraison
+                <DocumentTextIcon class="h-4 w-4 mr-2" />
+                Marquer prêt
               </button>
               <button
                 @click="openModal(commande)"
@@ -713,7 +799,7 @@ const commandesLivrees = computed(() => 0)
                 <div>
                   <label class="block text-sm font-medium text-gray-700 mb-2">Numéro de commande</label>
                   <input
-                    v-model="newCommande.numeroCommande"
+                    v-model="newCommande.numero_commande"
                     type="text"
                     readonly
                     class="w-full rounded-lg border-gray-300 bg-white text-gray-600"
@@ -802,7 +888,7 @@ const commandesLivrees = computed(() => 0)
                 <div>
                   <label class="block text-sm font-medium text-gray-700 mb-2">Date de livraison souhaitée</label>
                   <input
-                    v-model="newCommande.dateLivraisonSouhaitee"
+                    v-model="newCommande.date_livraison_souhaitee"
                     type="date"
                     class="w-full rounded-lg border-gray-300 focus:border-orange-500 focus:ring-orange-500 bg-white"
                   />
@@ -1393,6 +1479,17 @@ const commandesLivrees = computed(() => 0)
 
 .action-btn-success:hover {
   background: linear-gradient(135deg, #059669 0%, #047857 100%);
+  transform: translateY(-1px);
+}
+
+.action-btn-purple {
+  background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+  color: #ffffff;
+  border-color: #7c3aed;
+}
+
+.action-btn-purple:hover {
+  background: linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%);
   transform: translateY(-1px);
 }
 

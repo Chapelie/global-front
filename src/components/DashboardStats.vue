@@ -75,9 +75,9 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { ArchiveBoxIcon, DocumentTextIcon, TruckIcon, CogIcon } from '@heroicons/vue/24/outline'
-import { useCompleteHybridService } from '../services/completeHybridService'
+import { useLaravelApi } from '../services/laravelApiService'
 
-const { getDashboardStats, getMode } = useCompleteHybridService()
+const { getDashboardStats } = useLaravelApi()
 
 const stats = ref({
   articles: { total: 0, stockCritique: 0, valeurTotale: 0 },
@@ -93,7 +93,7 @@ const loadStats = async () => {
     console.log('🔍 [DashboardStats] Chargement des statistiques')
     const data = await getDashboardStats()
     stats.value = data
-    mode.value = getMode()
+    mode.value = getMode() as "online" | "offline"
     console.log('✅ [DashboardStats] Statistiques chargées:', data)
   } catch (error) {
     console.error('❌ [DashboardStats] Erreur lors du chargement des statistiques:', error)

@@ -1,10 +1,29 @@
 import { computed } from 'vue'
 import { useAuth } from './auth'
-import type { UserRole, UserPermissions } from '../lib/supabase'
+
+// Types pour les rôles et permissions
+export type UserRole = 'super_admin' | 'admin' | 'manager' | 'operator'
+
+export interface UserPermissions {
+  canViewProduction: boolean
+  canEditProduction: boolean
+  canViewCommandes: boolean
+  canEditCommandes: boolean
+  canViewLivraisons: boolean
+  canEditLivraisons: boolean
+  canViewStock: boolean
+  canEditStock: boolean
+  canViewPersonnel: boolean
+  canEditPersonnel: boolean
+  canViewAnalyses: boolean
+  canViewParametres: boolean
+  canEditParametres: boolean
+  canManageUsers: boolean
+}
 
 // Définition des permissions par rôle
 const ROLE_PERMISSIONS: Record<UserRole, UserPermissions> = {
-  superadmin: {
+  super_admin: {
     canViewProduction: true,
     canEditProduction: true,
     canViewCommandes: true,
@@ -67,38 +86,6 @@ const ROLE_PERMISSIONS: Record<UserRole, UserPermissions> = {
     canViewParametres: false,
     canEditParametres: false,
     canManageUsers: false
-  },
-  secretaire: {
-    canViewProduction: true,
-    canEditProduction: false,
-    canViewCommandes: true,
-    canEditCommandes: true,
-    canViewLivraisons: true,
-    canEditLivraisons: true,
-    canViewStock: true,
-    canEditStock: true,
-    canViewPersonnel: true,
-    canEditPersonnel: false,
-    canViewAnalyses: true,
-    canViewParametres: false,
-    canEditParametres: false,
-    canManageUsers: false
-  },
-  livreur: {
-    canViewProduction: false,
-    canEditProduction: false,
-    canViewCommandes: true,
-    canEditCommandes: false,
-    canViewLivraisons: true,
-    canEditLivraisons: true,
-    canViewStock: false,
-    canEditStock: false,
-    canViewPersonnel: false,
-    canEditPersonnel: false,
-    canViewAnalyses: false,
-    canViewParametres: false,
-    canEditParametres: false,
-    canManageUsers: false
   }
 }
 
@@ -108,7 +95,7 @@ export const useRoles = () => {
 
   // Rôle actuel de l'utilisateur
   const currentRole = computed((): UserRole => {
-    return user.value?.user_metadata?.role || 'secretaire'
+    return (user.value?.roles?.[0]?.name as UserRole) || 'operator'
   })
 
   // Permissions actuelles de l'utilisateur
@@ -150,12 +137,10 @@ export const useRoles = () => {
   // Vérification de hiérarchie des rôles
   const isHigherRole = (targetRole: UserRole): boolean => {
     const roleHierarchy: Record<UserRole, number> = {
-      superadmin: 5,
-      admin: 4,
-      manager: 3,
-      operator: 2,
-      secretaire: 2,
-      livreur: 1
+      super_admin: 4,
+      admin: 3,
+      manager: 2,
+      operator: 1
     }
     
     return roleHierarchy[currentRole.value] > roleHierarchy[targetRole]
@@ -164,12 +149,10 @@ export const useRoles = () => {
   // Nom d'affichage du rôle
   const roleDisplayName = computed(() => {
     const roleNames: Record<UserRole, string> = {
-      superadmin: 'Super Administrateur',
+      super_admin: 'Super Administrateur',
       admin: 'Administrateur',
       manager: 'Manager',
-      operator: 'Opérateur',
-      secretaire: 'Secrétaire',
-      livreur: 'Livreur'
+      operator: 'Opérateur'
     }
     return roleNames[currentRole.value]
   })
@@ -177,12 +160,10 @@ export const useRoles = () => {
   // Couleur du rôle pour l'affichage
   const roleColor = computed(() => {
     const roleColors: Record<UserRole, string> = {
-      superadmin: 'text-red-600 bg-red-50',
+      super_admin: 'text-red-600 bg-red-50',
       admin: 'text-blue-600 bg-blue-50',
       manager: 'text-purple-600 bg-purple-50',
-      operator: 'text-indigo-600 bg-indigo-50',
-      secretaire: 'text-green-600 bg-green-50',
-      livreur: 'text-orange-600 bg-orange-50'
+      operator: 'text-indigo-600 bg-indigo-50'
     }
     return roleColors[currentRole.value]
   })
@@ -232,4 +213,3 @@ export const checkRole = (role: UserRole): boolean => {
 
 // Export des constantes pour utilisation dans d'autres fichiers
 export { ROLE_PERMISSIONS }
-export type { UserRole, UserPermissions }
