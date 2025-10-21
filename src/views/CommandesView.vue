@@ -309,7 +309,7 @@ const marquerPret = async (commande: CompleteCommande) => {
     console.log('🔍 [CommandesView] Marquage de la commande comme prête:', commande.numero_commande)
 
     // Utiliser l'endpoint backend qui gère automatiquement la création de livraison
-    const response = await fetch(`http://localhost:8000/api/storage/commandes/${commande.id}/marquer-pret`, {
+    const response = await fetch(`${import.meta.env.VITE_LARAVEL_API_BASE_URL || 'http://localhost:8000/api'}/storage/commandes/${commande.id}/marquer-pret`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

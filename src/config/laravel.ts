@@ -6,10 +6,10 @@
 // Configuration de base
 export const LARAVEL_CONFIG = {
   // URL de base de l'API Laravel
-  BASE_URL: 'http://localhost:8000/api',
-  
+  BASE_URL: import.meta.env.VITE_LARAVEL_API_BASE_URL || 'http://localhost:8000/api',
+
   // URL de base pour l'authentification
-  AUTH_URL: 'http://localhost:8000/api/auth',
+  AUTH_URL: `${import.meta.env.VITE_LARAVEL_API_BASE_URL || 'http://localhost:8000/api'}/auth`,
   
   // Timeout pour les requêtes (en millisecondes)
   TIMEOUT: 30000,

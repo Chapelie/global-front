@@ -182,7 +182,7 @@ interface LaravelDocument {
 }
 
 class LaravelApiService {
-  private baseURL = 'http://109.123.249.170/api'
+  private baseURL = import.meta.env.VITE_LARAVEL_API_BASE_URL || 'http://localhost:8000/api'
   private token = ref<string | null>(localStorage.getItem('token'))
 
   constructor() {

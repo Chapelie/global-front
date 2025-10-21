@@ -6,7 +6,7 @@ export const APP_CONFIG = {
   // Configuration Laravel
   laravel: {
     enabled: true,
-    baseUrl: 'http://localhost:8000/api',
+    baseUrl: import.meta.env.VITE_LARAVEL_API_BASE_URL || 'http://localhost:8000/api',
     timeout: 30000
   },
   

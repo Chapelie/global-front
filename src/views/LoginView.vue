@@ -25,9 +25,9 @@ const handleLogin = async () => {
 
   try {
     console.log('🔐 [LoginView] Tentative de connexion')
-    console.log('📧 [LoginView] Email:', phone.value)
+    console.log('📱 [LoginView] Téléphone:', phone.value)
     
-    const result = await signIn({ email: phone.value, password: password.value })
+    const result = await signIn({ phone: phone.value, password: password.value })
     
     if (!result.success) {
       throw new Error(result.error || 'Erreur lors de la connexion')
@@ -66,7 +66,7 @@ const handleLogin = async () => {
       <div class="bg-white py-8 px-4 shadow-xl rounded-2xl sm:px-10">
         <form @submit.prevent="handleLogin" class="space-y-6">
           <div>
-            <label for="email" class="block text-sm font-medium text-gray-700">
+            <label for="phone" class="block text-sm font-medium text-gray-700">
 Numero de telephone            </label>
             <div class="mt-1">
               <input 

@@ -7,7 +7,7 @@ import { ref, computed } from 'vue'
 import { useLaravelApi, type LaravelUser } from './laravelApiService'
 
 interface LoginCredentials {
-  email: string
+  email?: string
   password: string
   phone?: string
 }
@@ -125,7 +125,7 @@ class LaravelAuthService {
     this.loading.value = true
     
     try {
-      const response = await fetch('http://localhost:8000/api/login', {
+      const response = await fetch(`${import.meta.env.VITE_LARAVEL_API_BASE_URL || 'http://localhost:8000/api'}/login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -163,7 +163,7 @@ class LaravelAuthService {
     this.loading.value = true
     
     try {
-      const response = await fetch('http://localhost:8000/api/register', {
+      const response = await fetch(`${import.meta.env.VITE_LARAVEL_API_BASE_URL || 'http://localhost:8000/api'}/register`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -202,7 +202,7 @@ class LaravelAuthService {
     
     try {
       // Appeler l'endpoint de déconnexion du backend
-      await fetch('http://localhost:8000/api/logout', {
+      await fetch(`${import.meta.env.VITE_LARAVEL_API_BASE_URL || 'http://localhost:8000/api'}/logout`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${this.api.isAuthenticated.value ? localStorage.getItem('token') : ''}`,
@@ -225,7 +225,7 @@ class LaravelAuthService {
     }
 
     try {
-      const response = await fetch('http://localhost:8000/api/user', {
+      const response = await fetch(`${import.meta.env.VITE_LARAVEL_API_BASE_URL || 'http://localhost:8000/api'}/user`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`,
           'Accept': 'application/json'
@@ -253,7 +253,7 @@ class LaravelAuthService {
     this.loading.value = true
     
     try {
-      const response = await fetch('http://localhost:8000/api/forgot-password', {
+      const response = await fetch(`${import.meta.env.VITE_LARAVEL_API_BASE_URL || 'http://localhost:8000/api'}/forgot-password`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -285,7 +285,7 @@ class LaravelAuthService {
     this.loading.value = true
     
     try {
-      const response = await fetch('http://localhost:8000/api/update-password', {
+      const response = await fetch(`${import.meta.env.VITE_LARAVEL_API_BASE_URL || 'http://localhost:8000/api'}/update-password`, {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`,
@@ -318,7 +318,7 @@ class LaravelAuthService {
     this.loading.value = true
     
     try {
-      const response = await fetch('http://localhost:8000/api/profile', {
+      const response = await fetch(`${import.meta.env.VITE_LARAVEL_API_BASE_URL || 'http://localhost:8000/api'}/profile`, {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`,
@@ -354,7 +354,7 @@ class LaravelAuthService {
     this.loading.value = true
     
     try {
-      const response = await fetch(`http://localhost:8000/api/users/${userId}/role`, {
+      const response = await fetch(`${import.meta.env.VITE_LARAVEL_API_BASE_URL || 'http://localhost:8000/api'}/users/${userId}/role`, {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`,
@@ -387,7 +387,7 @@ class LaravelAuthService {
     this.loading.value = true
     
     try {
-      const response = await fetch('http://localhost:8000/api/users', {
+      const response = await fetch(`${import.meta.env.VITE_LARAVEL_API_BASE_URL || 'http://localhost:8000/api'}/users`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`,
@@ -418,7 +418,7 @@ class LaravelAuthService {
   // Obtenir tous les utilisateurs (admin seulement)
   async getUsers(): Promise<{ success: boolean; error?: string; users?: LaravelUser[] }> {
     try {
-      const response = await fetch('http://localhost:8000/api/auth/users', {
+      const response = await fetch(`${import.meta.env.VITE_LARAVEL_API_BASE_URL || 'http://localhost:8000/api'}/auth/users`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`,
           'Accept': 'application/json'
