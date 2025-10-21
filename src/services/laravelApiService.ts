@@ -256,7 +256,7 @@ class LaravelApiService {
   async updateArticleStock(id: number, stock: number): Promise<LaravelArticle | null> {
     try {
       const response = await this.api.patch<{ data: LaravelArticle }>(`/articles/${id}/stock`, { stock })
-      return response.data || null
+      return response.data.data || null
     } catch (error) {
       console.error(`Erreur lors de la mise à jour du stock de l'article ${id}:`, error)
       throw error
@@ -276,7 +276,7 @@ class LaravelApiService {
   async getArticlesStockCritique(): Promise<LaravelArticle[]> {
     try {
       const response = await this.api.get<{ data: LaravelArticle[] }>('/articles/stock-critique')
-      return response.data || []
+      return response.data.data || []
     } catch (error) {
       console.error('Erreur lors de la récupération des articles en stock critique:', error)
       return []
@@ -286,7 +286,7 @@ class LaravelApiService {
   async getArticlesActifs(): Promise<LaravelArticle[]> {
     try {
       const response = await this.api.get<{ data: LaravelArticle[] }>('/articles/actifs')
-      return response.data || []
+      return response.data.data || []
     } catch (error) {
       console.error('Erreur lors de la récupération des articles actifs:', error)
       return []
@@ -299,7 +299,7 @@ class LaravelApiService {
   async getConsommables(): Promise<LaravelConsommable[]> {
     try {
       const response = await this.api.get<{ data: LaravelConsommable[] }>('/consommables')
-      return response.data || []
+      return response.data.data || []
     } catch (error) {
       console.error('Erreur lors de la récupération des consommables:', error)
       return []
@@ -309,7 +309,7 @@ class LaravelApiService {
   async getConsommable(id: number): Promise<LaravelConsommable | null> {
     try {
       const response = await this.api.get<{ data: LaravelConsommable }>(`/consommables/${id}`)
-      return response.data || null
+      return response.data.data || null
     } catch (error) {
       console.error(`Erreur lors de la récupération du consommable ${id}:`, error)
       return null
@@ -319,7 +319,7 @@ class LaravelApiService {
   async addConsommable(consommableData: Partial<LaravelConsommable>): Promise<LaravelConsommable | null> {
     try {
       const response = await this.api.post<{ data: LaravelConsommable }>('/consommables', consommableData)
-      return response.data || null
+      return response.data.data || null
     } catch (error) {
       console.error('Erreur lors de l\'ajout du consommable:', error)
       throw error
@@ -329,7 +329,7 @@ class LaravelApiService {
   async updateConsommable(id: number, consommableData: Partial<LaravelConsommable>): Promise<LaravelConsommable | null> {
     try {
       const response = await this.api.put<{ data: LaravelConsommable }>(`/consommables/${id}`, consommableData)
-      return response.data || null
+      return response.data.data || null
     } catch (error) {
       console.error(`Erreur lors de la mise à jour du consommable ${id}:`, error)
       throw error
@@ -349,7 +349,7 @@ class LaravelApiService {
   async updateConsommableStock(id: number, stock: number): Promise<LaravelConsommable | null> {
     try {
       const response = await this.api.patch<{ data: LaravelConsommable }>(`/consommables/${id}/stock`, { stock })
-      return response.data || null
+      return response.data.data || null
     } catch (error) {
       console.error(`Erreur lors de la mise à jour du stock du consommable ${id}:`, error)
       throw error
@@ -369,7 +369,7 @@ class LaravelApiService {
   async getConsommablesStockCritique(): Promise<LaravelConsommable[]> {
     try {
       const response = await this.api.get<{ data: LaravelConsommable[] }>('/consommables/stock-critique')
-      return response.data || []
+      return response.data.data || []
     } catch (error) {
       console.error('Erreur lors de la récupération des consommables en stock critique:', error)
       return []
@@ -379,7 +379,7 @@ class LaravelApiService {
   async getConsommablesPerimes(): Promise<LaravelConsommable[]> {
     try {
       const response = await this.api.get<{ data: LaravelConsommable[] }>('/consommables/perimes')
-      return response.data || []
+      return response.data.data || []
     } catch (error) {
       console.error('Erreur lors de la récupération des consommables périmés:', error)
       return []
@@ -389,7 +389,7 @@ class LaravelApiService {
   async getConsommablesVaPerimer(days: number = 30): Promise<LaravelConsommable[]> {
     try {
       const response = await this.api.get<{ data: LaravelConsommable[] }>(`/consommables/va-perimer?days=${days}`)
-      return response.data || []
+      return response.data.data || []
     } catch (error) {
       console.error('Erreur lors de la récupération des consommables qui vont périmer:', error)
       return []
@@ -413,7 +413,7 @@ class LaravelApiService {
   getCommande = async (id: number): Promise<LaravelCommande | null> => {
     try {
       const response = await this.api.get<{ data: LaravelCommande }>(`/orders/${id}`)
-      return response.data || null
+      return response.data.data || null
     } catch (error) {
       console.error(`Erreur lors de la récupération de la commande ${id}:`, error)
       return null
@@ -423,7 +423,7 @@ class LaravelApiService {
   addCommande = async (commandeData: Partial<LaravelCommande>): Promise<LaravelCommande | null> => {
     try {
       const response = await this.api.post<LaravelCommande>('/orders', commandeData)
-      return response || null
+      return response.data || null
     } catch (error) {
       console.error('Erreur lors de l\'ajout de la commande:', error)
       throw error
@@ -477,7 +477,7 @@ class LaravelApiService {
   getLivraison = async (id: number): Promise<LaravelLivraison | null> => {
     try {
       const response = await this.api.get<{ data: LaravelLivraison }>(`/deliveries/${id}`)
-      return response.data || null
+      return response.data.data || null
     } catch (error) {
       console.error(`Erreur lors de la récupération de la livraison ${id}:`, error)
       return null
@@ -487,7 +487,7 @@ class LaravelApiService {
   addLivraison = async (livraisonData: Partial<LaravelLivraison>): Promise<LaravelLivraison | null> => {
     try {
       const response = await this.api.post<LaravelLivraison>('/storage/livraisons/add', livraisonData)
-      return response || null
+      return response.data || null
     } catch (error) {
       console.error('Erreur lors de l\'ajout de la livraison:', error)
       throw error
@@ -574,7 +574,7 @@ class LaravelApiService {
   getProduction = async (id: number): Promise<LaravelProduction | null> => {
     try {
       const response = await this.api.get<{ data: LaravelProduction }>(`/production/batches/${id}`)
-      return response.data || null
+      return response.data.data || null
     } catch (error) {
       console.error(`Erreur lors de la récupération de la production ${id}:`, error)
       return null
@@ -584,7 +584,7 @@ class LaravelApiService {
   addProduction = async (productionData: Partial<LaravelProduction>): Promise<LaravelProduction | null> => {
     try {
       const response = await this.api.post<{ data: LaravelProduction }>('/production/batches', productionData)
-      return response.data || null
+      return response.data.data || null
     } catch (error) {
       console.error('Erreur lors de l\'ajout de la production:', error)
       throw error
@@ -625,7 +625,7 @@ class LaravelApiService {
   getUsers = async (): Promise<LaravelUser[]> => {
     try {
       const response = await this.api.get<{ data: LaravelUser[] }>('/users')
-      return response.data || []
+      return response.data.data || []
     } catch (error) {
       console.error('Erreur lors de la récupération des utilisateurs:', error)
       return []
@@ -635,7 +635,7 @@ class LaravelApiService {
   createUser = async (userData: Omit<LaravelUser, 'id' | 'created_at' | 'updated_at'> & { password: string }): Promise<LaravelUser | null> => {
     try {
       const response = await this.api.post<{ data: LaravelUser }>('/users', userData)
-      return response.data || null
+      return response.data.data || null
     } catch (error) {
       console.error('Erreur lors de la création de l\'utilisateur:', error)
       throw error
@@ -666,7 +666,7 @@ class LaravelApiService {
   getDocuments = async (): Promise<LaravelDocument[]> => {
     try {
       const response = await this.api.get<{ data: LaravelDocument[] }>('/documents')
-      return response.data || []
+      return response.data.data || []
     } catch (error) {
       console.error('Erreur lors de la récupération des documents:', error)
       return []
@@ -676,7 +676,7 @@ class LaravelApiService {
   getDocument = async (id: number): Promise<LaravelDocument | null> => {
     try {
       const response = await this.api.get<{ data: LaravelDocument }>(`/documents/${id}`)
-      return response.data || null
+      return response.data.data || null
     } catch (error) {
       console.error(`Erreur lors de la récupération du document ${id}:`, error)
       return null
@@ -686,7 +686,7 @@ class LaravelApiService {
   generateDeliveryNote = async (data: any): Promise<LaravelDocument | null> => {
     try {
       const response = await this.api.post<{ data: LaravelDocument }>('/documents/delivery-note', data)
-      return response.data || null
+      return response.data.data || null
     } catch (error) {
       console.error('Erreur lors de la génération du bordereau de livraison:', error)
       throw error
@@ -696,7 +696,7 @@ class LaravelApiService {
   generateInvoice = async (data: any): Promise<LaravelDocument | null> => {
     try {
       const response = await this.api.post<{ data: LaravelDocument }>('/documents/invoice', data)
-      return response.data || null
+      return response.data.data || null
     } catch (error) {
       console.error('Erreur lors de la génération de la facture:', error)
       throw error
@@ -749,7 +749,7 @@ class LaravelApiService {
   getDocumentTypes = async (): Promise<{ value: string; label: string }[]> => {
     try {
       const response = await this.api.get<{ data: { value: string; label: string }[] }>('/documents/types')
-      return response.data || []
+      return response.data.data || []
     } catch (error) {
       console.error('Erreur lors de la récupération des types de documents:', error)
       return []
@@ -813,7 +813,7 @@ class LaravelApiService {
     try {
       const today = new Date().toISOString().split('T')[0]
       const response = await this.api.get<{ data: LaravelProduction[] }>(`/productions?date=${today}`)
-      return response.data || []
+      return response.data.data || []
     } catch (error) {
       console.error('Erreur lors de la récupération des productions du jour:', error)
       return []
@@ -824,7 +824,7 @@ class LaravelApiService {
   getAnalyses = async (): Promise<any[]> => {
     try {
       const response = await this.api.get<{ data: any[] }>('/analyses')
-      return response.data || []
+      return response.data.data || []
     } catch (error) {
       console.error('Erreur lors de la récupération des analyses:', error)
       return []
@@ -834,7 +834,7 @@ class LaravelApiService {
   addDocument = async (data: any): Promise<any> => {
     try {
       const response = await this.api.post<{ data: any }>('/documents', data)
-      return response.data || null
+      return response.data.data || null
     } catch (error) {
       console.error('Erreur lors de l\'ajout du document:', error)
       throw error

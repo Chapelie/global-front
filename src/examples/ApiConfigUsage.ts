@@ -3,7 +3,7 @@
  * Ce fichier montre comment utiliser la nouvelle architecture API
  */
 
-import { useApiConfig } from '../config/ApiConfig'
+import { useApiConfig, type ApiError } from '../config/ApiConfig'
 
 // Exemple 1: Utilisation basique dans un composable Vue
 export function useExampleApi() {
@@ -15,7 +15,7 @@ export function useExampleApi() {
       const response = await api.get(api.endpoints.articles.index)
       return response.data
     } catch (error) {
-      console.error('Erreur:', api.handleError(error))
+      console.error('Erreur:', api.handleError(error as ApiError))
       return []
     }
   }
@@ -26,7 +26,7 @@ export function useExampleApi() {
       const response = await api.post(api.endpoints.articles.store, articleData)
       return response.data
     } catch (error) {
-      throw new Error(api.handleError(error))
+      throw new Error(api.handleError(error as ApiError))
     }
   }
 
@@ -40,7 +40,7 @@ export function useExampleApi() {
 
       return response.data.user
     } catch (error) {
-      throw new Error(api.handleError(error))
+      throw new Error(api.handleError(error as ApiError))
     }
   }
 
