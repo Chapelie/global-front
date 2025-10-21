@@ -7,7 +7,7 @@ import { CubeIcon } from '@heroicons/vue/24/outline'
 
 const router = useRouter()
 const { logo, getLogoAlt, getLogoClass } = useLogo()
-const { signIn, isLoading } = useLaravelAuth()
+const { signIn, isLoading, isAuthenticated } = useLaravelAuth()
 
 const phone = ref('')
 const password = ref('')
@@ -26,18 +26,21 @@ const handleLogin = async () => {
   try {
     console.log('🔐 [LoginView] Tentative de connexion')
     console.log('📱 [LoginView] Téléphone:', phone.value)
-    
+
     const result = await signIn({ phone: phone.value, password: password.value })
-    
+
     if (!result.success) {
       throw new Error(result.error || 'Erreur lors de la connexion')
     }
-    
-    console.log('✅ [LoginView] Connexion réussie')
+
+    console.log('✅ [LoginView] Connexion réussie:', result)
+    console.log('🔄 [LoginView] État authentification:', isAuthenticated.value)
     success.value = 'Connexion réussie ! Redirection...'
-    
-    // Redirection vers le dashboard après un court délai
+
+    // Attendre que l'état d'authentification soit mis à jour, puis rediriger
     setTimeout(() => {
+      console.log('🔄 [LoginView] État authentification final:', isAuthenticated.value)
+      console.log('🔀 [LoginView] Redirection vers /')
       router.push('/')
     }, 1000)
     

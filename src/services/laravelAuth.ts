@@ -5,6 +5,7 @@
 
 import { ref, computed } from 'vue'
 import { useLaravelApi, type LaravelUser } from './laravelApiService'
+import { ApiConfig, type ApiError } from '../config/ApiConfig'
 
 interface LoginCredentials {
   email?: string
@@ -39,7 +40,8 @@ interface PasswordReset {
 }
 
 class LaravelAuthService {
-  private api = useLaravelApi()
+  private apiService = useLaravelApi()
+  private api = ApiConfig.getInstance()
   public user = ref<LaravelUser | null>(null)
   private loading = ref(false)
   private _isInitialized = ref(false)
@@ -54,7 +56,7 @@ class LaravelAuthService {
   }
 
   get isAuthenticated() {
-    return computed(() => !!this.user.value && !!this.api.isAuthenticated.value)
+    return computed(() => !!this.user.value && !!this.api.getToken())
   }
 
   get isLoading() {
@@ -123,35 +125,22 @@ class LaravelAuthService {
   // Connexion
   signIn = async (credentials: LoginCredentials): Promise<{ success: boolean; error?: string; user?: LaravelUser }> => {
     this.loading.value = true
-    
+
     try {
-      const response = await fetch(`${import.meta.env.VITE_LARAVEL_API_BASE_URL || 'http://localhost:8000/api'}/login`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json'
-        },
-        body: JSON.stringify(credentials)
-      })
-
-      const data = await response.json()
-
-      if (!response.ok) {
-        throw new Error(data.message || 'Erreur de connexion')
-      }
+      const response = await this.api.post<AuthResponse>(this.api.endpoints.auth.login, credentials)
 
       // Sauvegarder l'utilisateur et le token
-      this.user.value = data.user
-      this.saveUserToStorage(data.user, data.token)
+      this.user.value = response.data.user
+      this.saveUserToStorage(response.data.user, response.data.token)
 
-      console.log('✅ Connexion réussie:', data.user)
-      return { success: true, user: data.user }
+      this.api.debug('Connexion réussie:', response.data.user)
+      return { success: true, user: response.data.user }
 
     } catch (error) {
-      console.error('❌ Erreur de connexion:', error)
-      return { 
-        success: false, 
-        error: error instanceof Error ? error.message : 'Erreur de connexion' 
+      this.api.debugError('Erreur de connexion:', error)
+      return {
+        success: false,
+        error: this.api.handleError(error as ApiError)
       }
     } finally {
       this.loading.value = false
@@ -205,7 +194,7 @@ class LaravelAuthService {
       await fetch(`${import.meta.env.VITE_LARAVEL_API_BASE_URL || 'http://localhost:8000/api'}/logout`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${this.api.isAuthenticated.value ? localStorage.getItem('token') : ''}`,
+          'Authorization': `Bearer ${this.api.getToken() ? localStorage.getItem('token') : ''}`,
           'Accept': 'application/json'
         }
       })
@@ -220,7 +209,7 @@ class LaravelAuthService {
 
   // Obtenir la session actuelle
   getSession = async (): Promise<LaravelUser | null> => {
-    if (!this.api.isAuthenticated.value) {
+    if (!this.api.getToken()) {
       return null
     }
 
@@ -464,7 +453,7 @@ class LaravelAuthService {
     // Dans Laravel Sanctum, on peut implémenter un système de polling
     // ou utiliser WebSockets pour les changements d'état en temps réel
     const checkAuthState = () => {
-      if (this.api.isAuthenticated.value && !this.user.value) {
+      if (this.api.getToken() && !this.user.value) {
         this.getSession()
       }
       callback(this.user.value)
@@ -481,7 +470,7 @@ class LaravelAuthService {
 
   // Initialiser le service
   init = async (): Promise<void> => {
-    if (this.api.isAuthenticated.value) {
+    if (this.api.getToken()) {
       await this.getSession()
     }
     this._isInitialized.value = true

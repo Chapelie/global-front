@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useLaravelApi, type LaravelCommande, type LaravelArticle } from '../services/laravelApiService'
+import { useApiConfig } from '../config/ApiConfig'
 import type { CompleteCommande } from '../types/global'
 import {
   PlusIcon,
@@ -20,6 +21,7 @@ import {
 } from '@heroicons/vue/24/outline'
 
 const { getCommandes, addCommande, updateCommande, deleteCommande, getArticles, addLivraison } = useLaravelApi()
+const apiConfig = useApiConfig()
 const commandes = ref<LaravelCommande[]>([])
 const showModal = ref(false)
 const editingCommande = ref<LaravelCommande | null>(null)
@@ -309,23 +311,11 @@ const marquerPret = async (commande: CompleteCommande) => {
     console.log('🔍 [CommandesView] Marquage de la commande comme prête:', commande.numero_commande)
 
     // Utiliser l'endpoint backend qui gère automatiquement la création de livraison
-    const response = await fetch(`${import.meta.env.VITE_LARAVEL_API_BASE_URL || 'http://localhost:8000/api'}/storage/commandes/${commande.id}/marquer-pret`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    })
-
-    if (!response.ok) {
-      const errorData = await response.json()
-      throw new Error(errorData.error || 'Erreur lors du marquage comme prêt')
-    }
-
-    const result = await response.json()
-    console.log('✅ [CommandesView] Commande marquée comme prête et livraison créée:', result)
+    const response = await apiConfig.post(apiConfig.endpoints.commandes.marquerPret(commande.id))
+    apiConfig.debug('Commande marquée comme prête et livraison créée:', response)
 
     await loadCommandes()
-    alert(result.message || 'Commande marquée comme prête et livraison créée automatiquement!')
+    alert(response.message || 'Commande marquée comme prête et livraison créée automatiquement!')
   } catch (error) {
     console.error('❌ [CommandesView] Erreur lors du marquage comme prêt:', error)
     alert('Erreur lors du marquage de la commande comme prête: ' + (error as Error).message)
