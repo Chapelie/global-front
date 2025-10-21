@@ -129,3 +129,4 @@ export declare function deleteUser(id: number): Promise<boolean>
 
 // Fonction utilitaire manquante
 export declare function getMode(): string
+

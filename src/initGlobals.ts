@@ -33,3 +33,4 @@ import { useLaravelApi } from './services/laravelApiService'
 const api = useLaravelApi()
 ;(globalThis as any).getAnalyses = api.getAnalyses
 ;(globalThis as any).getProductions = api.getProductions
+
