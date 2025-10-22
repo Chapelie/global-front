@@ -34,3 +34,4 @@ const api = useLaravelApi()
 ;(globalThis as any).getAnalyses = api.getAnalyses
 ;(globalThis as any).getProductions = api.getProductions
 
+
