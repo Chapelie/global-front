@@ -334,7 +334,7 @@ export class ApiConfig {
   public handleError(error: ApiError): string {
     switch (error.status) {
       case 401:
-        this.setToken(null) // Déconnexion automatique
+        // Ne pas déconnecter automatiquement
         return 'Session expirée. Veuillez vous reconnecter.'
       case 403:
         return 'Accès interdit. Permissions insuffisantes.'

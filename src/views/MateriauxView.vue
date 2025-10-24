@@ -722,7 +722,7 @@ const formatDate = (dateString: string) => {
 
           <!-- Contenu -->
           <div class="px-6 py-6 max-h-96 overflow-y-auto bg-white">
-            <form @submit.prevent="saveItem" class="space-y-4">
+            <form v-if="editingItem" @submit.prevent="saveItem" class="space-y-4">
               <!-- Nom -->
               <div>
                 <label class="block text-sm font-medium text-gray-700 mb-2">Nom *</label>

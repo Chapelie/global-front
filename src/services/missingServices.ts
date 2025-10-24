@@ -92,7 +92,7 @@ export async function updateUser(id: number, data: any): Promise<any> {
 
 export async function createUser(data: any): Promise<any> {
   try {
-    return await api.createUser(data)
+    return await api.addUser(data)
   } catch (error) {
     console.error('Erreur lors de la création de l\'utilisateur:', error)
     throw error

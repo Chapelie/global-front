@@ -74,6 +74,7 @@ const newUser = ref<User>({
 
 // Nouveau rôle
 const newRole = ref<Role>({
+  id: 0, // ID temporaire pour la création
   name: '',
   display_name: '',
   description: '',
@@ -175,7 +176,18 @@ onMounted(async () => {
 const loadUsers = async () => {
   try {
     isLoading.value = true
-    users.value = await getUsers()
+    const laravelUsers = await getUsers()
+    // Convertir LaravelUser[] en User[]
+    users.value = laravelUsers.map(user => ({
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      phone: user.phone,
+      role: user.role || 'user',
+      password: '',
+      password_confirmation: '',
+      actif: user.actif !== false
+    }))
   } catch (error) {
     console.error('Erreur lors du chargement des utilisateurs:', error)
     alert('Erreur lors du chargement des utilisateurs')
@@ -677,7 +689,7 @@ const copyToClipboard = (text: string) => {
               <div>
                 <label class="block text-sm font-medium text-gray-700 mb-2">Nom complet *</label>
               <input
-                  v-model="editingUser.name"
+                  v-model="editingUser!.name"
                 type="text"
                 required
                   class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
@@ -688,7 +700,7 @@ const copyToClipboard = (text: string) => {
               <div>
                 <label class="block text-sm font-medium text-gray-700 mb-2">Email *</label>
             <input
-                  v-model="editingUser.email"
+                  v-model="editingUser!.email"
               type="email"
               required
                   class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
@@ -699,8 +711,8 @@ const copyToClipboard = (text: string) => {
               <div>
                 <label class="block text-sm font-medium text-gray-700 mb-2">Téléphone</label>
             <input
-                  v-model="editingUser.phone"
-                  type="tel"
+                  v-model="editingUser!.phone"
+                type="tel"
                   class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
             />
           </div>
@@ -709,7 +721,7 @@ const copyToClipboard = (text: string) => {
               <div>
                 <label class="block text-sm font-medium text-gray-700 mb-2">Rôle *</label>
                 <select
-                  v-model="editingUser.role"
+                  v-model="editingUser!.role"
                   required
                   class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
                 >
@@ -728,7 +740,7 @@ const copyToClipboard = (text: string) => {
                 <label class="block text-sm font-medium text-gray-700 mb-2">Mot de passe *</label>
                 <div class="relative">
               <input
-                    v-model="editingUser.password"
+                    v-model="editingUser!.password"
                     :type="showPassword ? 'text' : 'password'"
                     required
                     class="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
@@ -758,7 +770,7 @@ const copyToClipboard = (text: string) => {
               <div v-if="!isEditingUser">
                 <label class="block text-sm font-medium text-gray-700 mb-2">Confirmer le mot de passe *</label>
                 <input
-                  v-model="editingUser.password_confirmation"
+                  v-model="editingUser!.password_confirmation"
                   type="password"
                   required
                   class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
@@ -768,7 +780,7 @@ const copyToClipboard = (text: string) => {
               <!-- Statut -->
               <div class="flex items-center">
                 <input
-                  v-model="editingUser.actif"
+                  v-model="editingUser!.actif"
                   type="checkbox"
                   class="h-4 w-4 text-orange-600 focus:ring-orange-500 border-gray-300 rounded"
                 />
@@ -837,7 +849,7 @@ const copyToClipboard = (text: string) => {
               <div>
                 <label class="block text-sm font-medium text-gray-700 mb-2">Nom du rôle *</label>
                 <input
-                  v-model="editingRole.name"
+                  v-model="editingRole!.name"
                   type="text"
                   required
                   placeholder="Ex: custom_role"
@@ -849,7 +861,7 @@ const copyToClipboard = (text: string) => {
               <div>
                 <label class="block text-sm font-medium text-gray-700 mb-2">Nom d'affichage *</label>
                 <input
-                  v-model="editingRole.display_name"
+                  v-model="editingRole!.display_name"
                   type="text"
                   required
                   placeholder="Ex: Rôle Personnalisé"
@@ -861,7 +873,7 @@ const copyToClipboard = (text: string) => {
               <div>
                 <label class="block text-sm font-medium text-gray-700 mb-2">Description</label>
                 <textarea
-                  v-model="editingRole.description"
+                  v-model="editingRole!.description"
                   rows="3"
                   class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
                 ></textarea>
@@ -871,7 +883,7 @@ const copyToClipboard = (text: string) => {
               <div>
                 <label class="block text-sm font-medium text-gray-700 mb-2">Couleur</label>
                 <select
-                  v-model="editingRole.color"
+                  v-model="editingRole!.color"
                   class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
                 >
                   <option value="blue">Bleu</option>
@@ -899,7 +911,7 @@ const copyToClipboard = (text: string) => {
                     class="flex items-center"
                   >
                     <input
-                      v-model="editingRole.permissions"
+                      v-model="editingRole!.permissions"
                       :value="permission"
                       type="checkbox"
                       class="h-4 w-4 text-orange-600 focus:ring-orange-500 border-gray-300 rounded"
