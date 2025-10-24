@@ -117,16 +117,16 @@
             <span>{{ formatDate(production.date) }}</span>
           </div>
           <div class="flex items-center text-sm text-gray-600 mb-2">
-            <ClockIcon class="h-4 w-4 mr-2" />
-            <span>{{ production.tempsEffectif || 0 }}h</span>
-          </div>
-          <div class="flex items-center text-sm text-gray-600 mb-2">
             <CogIcon class="h-4 w-4 mr-2" />
             <span>{{ production.articlesProduits?.length || 0 }} articles</span>
           </div>
+          <div class="flex items-center text-sm text-gray-600 mb-2">
+            <CubeIcon class="h-4 w-4 mr-2" />
+            <span>{{ production.quantite_ciment || 0 }}kg ciment</span>
+          </div>
           <div class="flex items-center text-sm text-gray-600">
-            <CurrencyDollarIcon class="h-4 w-4 mr-2" />
-            <span>{{ formatCurrency(production.coutProduction || 0) }}</span>
+            <BeakerIcon class="h-4 w-4 mr-2" />
+            <span>{{ production.quantite_adjuvant || 0 }}kg adjuvant</span>
           </div>
         </div>
 
@@ -141,13 +141,6 @@
               <span class="text-gray-900">{{ article.nom }}</span>
               <span class="text-gray-600">{{ article.quantiteProduite }} {{ article.unite }}</span>
             </div>
-          </div>
-        </div>
-
-        <div class="mb-4 p-4 bg-gray-50 rounded-lg">
-          <div class="flex justify-between text-sm">
-            <span class="text-gray-600">Rendement:</span>
-            <span class="font-semibold text-gray-900">{{ production.rendement || 0 }}%</span>
           </div>
         </div>
 
@@ -205,31 +198,21 @@
             </div>
 
             <div>
-              <label class="block text-sm font-medium text-gray-700 mb-2">Temps effectif (heures)</label>
+              <label class="block text-sm font-medium text-gray-700 mb-2">Quantité de ciment (kg)</label>
               <input 
-                v-model.number="newProduction.tempsEffectif" 
+                v-model.number="newProduction.quantite_ciment" 
                 type="number" 
+                min="0"
                 class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
               />
             </div>
 
             <div>
-              <label class="block text-sm font-medium text-gray-700 mb-2">Rendement (%)</label>
+              <label class="block text-sm font-medium text-gray-700 mb-2">Quantité d'adjuvant (kg)</label>
               <input 
-                v-model.number="newProduction.rendement" 
+                v-model.number="newProduction.quantite_adjuvant" 
                 type="number" 
-                min="0" 
-                max="100" 
-                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-              />
-            </div>
-
-            <div>
-              <label class="block text-sm font-medium text-gray-700 mb-2">Coût de production</label>
-              <input 
-                v-model.number="newProduction.coutProduction" 
-                type="number" 
-                step="0.01" 
+                min="0"
                 class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
               />
             </div>
@@ -310,7 +293,9 @@ import {
   CheckCircleIcon,
   ArrowUpIcon,
   MagnifyingGlassIcon,
-  CurrencyDollarIcon
+  CurrencyDollarIcon,
+  CubeIcon,
+  BeakerIcon
 } from '@heroicons/vue/24/outline'
 import { useLaravelApi, type LaravelProduction } from '../services/laravelApiService'
 
@@ -329,9 +314,8 @@ const newProduction = ref({
   lotId: '',
   statut: 'en_attente' as 'en_attente' | 'en_cours' | 'termine' | 'annule',
   articlesProduits: [{ nom: '', quantiteProduite: 0, unite: '' }],
-  tempsEffectif: 0,
-  rendement: 0,
-  coutProduction: 0
+  quantite_ciment: 0,
+  quantite_adjuvant: 0
 })
 
 const filteredProductions = computed(() => {
@@ -437,9 +421,8 @@ const openModal = (production?: LaravelProduction) => {
       lotId: production.lotId || production.lot_id || '',
       statut: production.statut as 'en_attente' | 'en_cours' | 'termine' | 'annule',
       articlesProduits: production.articlesProduits || [],
-      tempsEffectif: production.tempsEffectif || 0,
-      rendement: production.rendement || 0,
-      coutProduction: production.coutProduction || 0
+      quantite_ciment: production.quantite_ciment || 0,
+      quantite_adjuvant: production.quantite_adjuvant || 0
     }
   } else {
     editingProduction.value = null
@@ -448,9 +431,8 @@ const openModal = (production?: LaravelProduction) => {
       lotId: '',
       statut: 'en_attente' as 'en_attente' | 'en_cours' | 'termine' | 'annule',
       articlesProduits: [{ nom: '', quantiteProduite: 0, unite: '' }],
-      tempsEffectif: 0,
-      rendement: 0,
-      coutProduction: 0
+      quantite_ciment: 0,
+      quantite_adjuvant: 0
     }
   }
   showModal.value = true
@@ -478,12 +460,21 @@ const saveProduction = async () => {
       return
     }
 
+    // Valider et formater la date
+    const productionDate = new Date(newProduction.value.date)
+    if (isNaN(productionDate.getTime())) {
+      alert('Date invalide')
+      return
+    }
+
     // Mapper les données frontend vers le format backend
     const productionData = {
-      product_id: selectedArticle.id,
-      quantity: newProduction.value.articlesProduits[0].quantiteProduite,
-      production_date: newProduction.value.date,
-      notes: `Statut: ${newProduction.value.statut}, Temps effectif: ${newProduction.value.tempsEffectif}h, Rendement: ${newProduction.value.rendement}%, Lot ID: ${newProduction.value.lotId}, Coût: ${newProduction.value.coutProduction}€`
+      date: productionDate.toISOString().split('T')[0], // Format YYYY-MM-DD
+      statut: newProduction.value.statut,
+      lot_id: newProduction.value.lotId,
+      quantite_ciment: newProduction.value.quantite_ciment || 0,
+      quantite_adjuvant: newProduction.value.quantite_adjuvant || 0,
+      articlesProduits: newProduction.value.articlesProduits
     }
 
     console.log('🔍 [ProductionView] Données mappées:', productionData)
@@ -552,7 +543,10 @@ const getStatutText = (statut: string) => {
 }
 
 const formatDate = (date: string) => {
-  return new Date(date).toLocaleDateString('fr-FR')
+  if (!date) return 'Date non définie'
+  const dateObj = new Date(date)
+  if (isNaN(dateObj.getTime())) return 'Date invalide'
+  return dateObj.toLocaleDateString('fr-FR')
 }
 
 const formatCurrency = (amount: number) => {

@@ -3,6 +3,9 @@ import { ref, computed } from 'vue'
 import { RouterView, useRoute, useRouter } from 'vue-router'
 import { useAuth } from '@/services/auth'
 import { useLogo } from './composables/useLogo'
+import { useAlert } from './composables/useAlert'
+import ProductionReminder from './components/ProductionReminder.vue'
+import CustomAlert from './components/CustomAlert.vue'
 import { 
   Bars3Icon, 
   XMarkIcon,
@@ -15,13 +18,15 @@ import {
   ChartBarIcon,
   Cog6ToothIcon,
   ArrowRightOnRectangleIcon,
-  ShoppingCartIcon
+  ShoppingCartIcon,
+  TagIcon
 } from '@heroicons/vue/24/outline'
 
 const sidebarOpen = ref(false)
 const route = useRoute()
 const router = useRouter()
 const { logo, getLogoAlt, getLogoClass } = useLogo()
+const { alertState, confirm, cancel, close } = useAlert()
 
 // Pages qui ne nécessitent pas de sidebar/navbar
 const authPages = ['/login', '/register']
@@ -33,6 +38,7 @@ const navigation = [
   { name: 'Production', href: '/production', icon: CubeIcon },
   { name: 'Livraison', href: '/livraison', icon: TruckIcon },
   { name: 'Stock', href: '/stock', icon: ArchiveBoxIcon },
+  { name: 'Matériaux', href: '/materiaux', icon: TagIcon },
   { name: 'Documents', href: '/documents', icon: DocumentTextIcon },
   { name: 'Personnel', href: '/personnel', icon: UsersIcon },
   { name: 'Analyses', href: '/analyses', icon: ChartBarIcon },
@@ -65,6 +71,9 @@ const handleLogout = async () => {
 
   <!-- Pages principales - Layout avec sidebar/navbar -->
   <div v-else class="min-h-screen bg-gray-50">
+    <!-- Rappel de production du jour -->
+    <ProductionReminder />
+    
     <!-- Sidebar pour mobile -->
     <div v-if="sidebarOpen" class="relative z-50 lg:hidden mobile-safe-area">
       <div class="fixed inset-0 bg-gray-900 bg-opacity-75 backdrop-blur-sm" @click="toggleSidebar"></div>
@@ -265,6 +274,20 @@ const handleLogout = async () => {
       </main>
     </div>
   </div>
+
+  <!-- Alerte globale -->
+  <CustomAlert
+    :show="alertState.show"
+    :title="alertState.title"
+    :message="alertState.message"
+    :type="alertState.type"
+    :show-cancel="alertState.showCancel"
+    :confirm-text="alertState.confirmText"
+    :cancel-text="alertState.cancelText"
+    @confirm="confirm"
+    @cancel="cancel"
+    @close="close"
+  />
 </template>
 
 <style scoped>

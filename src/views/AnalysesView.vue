@@ -1,774 +1,625 @@
+<script setup lang="ts">
+import { ref, computed, onMounted } from 'vue'
+import { useLaravelApi } from '../services/laravelApiService'
+import {
+  ChartBarIcon,
+  DocumentArrowDownIcon,
+  EnvelopeIcon,
+  CalendarIcon,
+  ClockIcon,
+  UserGroupIcon,
+  TruckIcon,
+  CubeIcon,
+  ArrowTrendingUpIcon,
+  ArrowTrendingDownIcon,
+  MinusIcon
+} from '@heroicons/vue/24/outline'
+
+// Services
+const { 
+  getGeneralStats, 
+  getProductionStats, 
+  getDeliveryStats, 
+  generatePdfReport, 
+  sendEmailReport 
+} = useLaravelApi()
+
+// État réactif
+const isLoading = ref(false)
+const activeTab = ref<'overview' | 'production' | 'delivery'>('overview')
+const selectedPeriod = ref('month')
+const startDate = ref('')
+const endDate = ref('')
+const reportType = ref('production')
+
+// Données
+const generalStats = ref<any>({})
+const productionStats = ref<any>({})
+const deliveryStats = ref<any>({})
+
+// Computed
+const periodLabel = computed(() => {
+  switch (selectedPeriod.value) {
+    case 'day': return 'Aujourd\'hui'
+    case 'week': return 'Cette semaine'
+    case 'month': return 'Ce mois'
+    case 'year': return 'Cette année'
+    default: return 'Période personnalisée'
+  }
+})
+
+// Charger les données
+onMounted(async () => {
+  await loadGeneralStats()
+  await loadProductionStats()
+  await loadDeliveryStats()
+})
+
+const loadGeneralStats = async () => {
+  try {
+    isLoading.value = true
+    generalStats.value = await getGeneralStats()
+  } catch (error) {
+    console.error('Erreur lors du chargement des statistiques générales:', error)
+  } finally {
+    isLoading.value = false
+  }
+}
+
+const loadProductionStats = async () => {
+  try {
+    const params: any = { period: selectedPeriod.value }
+    if (startDate.value && endDate.value) {
+      params.start_date = startDate.value
+      params.end_date = endDate.value
+    }
+    
+    productionStats.value = await getProductionStats(params)
+  } catch (error) {
+    console.error('Erreur lors du chargement des statistiques de production:', error)
+  }
+}
+
+const loadDeliveryStats = async () => {
+  try {
+    const params: any = { period: selectedPeriod.value }
+    if (startDate.value && endDate.value) {
+      params.start_date = startDate.value
+      params.end_date = endDate.value
+    }
+    
+    deliveryStats.value = await getDeliveryStats(params)
+  } catch (error) {
+    console.error('Erreur lors du chargement des statistiques de livraison:', error)
+  }
+}
+
+// Actions
+const refreshData = async () => {
+  await Promise.all([
+    loadGeneralStats(),
+    loadProductionStats(),
+    loadDeliveryStats()
+  ])
+}
+
+const generatePdf = async () => {
+  try {
+    isLoading.value = true
+    
+    const params = {
+      type: reportType.value,
+      period: selectedPeriod.value,
+      start_date: startDate.value,
+      end_date: endDate.value
+    }
+    
+    const result = await generatePdfReport(params)
+    
+    if (result.success) {
+      // Pour l'instant, afficher les données dans une modal au lieu de télécharger
+      console.log('Données du rapport:', result.data)
+      
+      // Créer un fichier JSON téléchargeable temporairement
+      const dataStr = JSON.stringify(result.data, null, 2)
+      const dataBlob = new Blob([dataStr], { type: 'application/json' })
+      const url = URL.createObjectURL(dataBlob)
+      
+      const link = document.createElement('a')
+      link.href = url
+      link.download = result.filename
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      URL.revokeObjectURL(url)
+      
+      alert('Rapport généré et téléchargé (format JSON temporaire) !')
+    } else {
+      alert('Erreur lors de la génération du rapport: ' + result.error)
+    }
+  } catch (error) {
+    console.error('Erreur lors de la génération du PDF:', error)
+    alert('Erreur lors de la génération du PDF')
+  } finally {
+    isLoading.value = false
+  }
+}
+
+const sendEmail = async () => {
+  try {
+    isLoading.value = true
+    
+    const params = {
+      type: selectedPeriod.value === 'week' ? 'weekly' : 'monthly',
+      email: 'clemsobonding@gmail.com',
+      period: selectedPeriod.value
+    }
+    
+    const result = await sendEmailReport(params)
+    
+    if (result.success) {
+      alert('Rapport envoyé par email avec succès !')
+    }
+  } catch (error) {
+    console.error('Erreur lors de l\'envoi de l\'email:', error)
+    alert('Erreur lors de l\'envoi de l\'email')
+  } finally {
+    isLoading.value = false
+  }
+}
+
+const changePeriod = () => {
+  refreshData()
+}
+
+// Fonctions utilitaires
+const formatNumber = (num: number) => {
+  return new Intl.NumberFormat('fr-FR').format(num)
+}
+
+const getTrendIcon = (current: number, previous: number) => {
+  if (current > previous) return ArrowTrendingUpIcon
+  if (current < previous) return ArrowTrendingDownIcon
+  return MinusIcon
+}
+
+const getTrendColor = (current: number, previous: number) => {
+  if (current > previous) return 'text-green-600'
+  if (current < previous) return 'text-red-600'
+  return 'text-gray-600'
+}
+</script>
+
 <template>
-  <div class="analyses-container">
+  <div class="analyses-container min-h-screen bg-gray-50">
     <!-- Header -->
-    <div class="analyses-header">
-      <h1 class="analyses-title">Analyses</h1>
-      <p class="analyses-subtitle">Gestion des analyses de qualité, performance et coûts</p>
-    </div>
-
-    <!-- Stats -->
-    <div class="analyses-stats">
-      <div class="stat-card">
-        <div class="stat-icon">
-          <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-          </svg>
-        </div>
-        <div class="stat-content">
-          <div class="stat-value">{{ analyses.length }}</div>
-          <div class="stat-label">Total analyses</div>
-        </div>
-      </div>
-
-      <div class="stat-card">
-        <div class="stat-icon">
-          <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-        </div>
-        <div class="stat-content">
-          <div class="stat-value">{{ analysesEnCours }}</div>
-          <div class="stat-label">En cours</div>
-        </div>
-      </div>
-
-      <div class="stat-card">
-        <div class="stat-icon">
-          <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-        </div>
-        <div class="stat-content">
-          <div class="stat-value">{{ analysesTerminees }}</div>
-          <div class="stat-label">Terminées</div>
-          </div>
-          </div>
-          </div>
-
-    <!-- Filtres -->
-    <div class="analyses-filters">
-      <div class="filter-group">
-        <label class="filter-label">Recherche</label>
-        <input
-          v-model="searchTerm"
-          type="text"
-          placeholder="Rechercher une analyse..."
-          class="filter-input"
-        />
-        </div>
-
-      <div class="filter-group">
-        <label class="filter-label">Type</label>
-        <select v-model="selectedType" class="filter-select">
-          <option value="">Tous les types</option>
-          <option value="qualite">Qualité</option>
-          <option value="performance">Performance</option>
-          <option value="cout">Coût</option>
-          <option value="rendement">Rendement</option>
-          <option value="autre">Autre</option>
-        </select>
-      </div>
-
-      <div class="filter-group">
-        <label class="filter-label">Statut</label>
-        <select v-model="selectedStatut" class="filter-select">
-          <option value="">Tous les statuts</option>
-          <option value="en_cours">En cours</option>
-          <option value="termine">Terminé</option>
-          <option value="annule">Annulé</option>
-        </select>
-          </div>
-          </div>
-
-    <!-- Actions -->
-    <div class="analyses-actions">
-      <button @click="openModal()" class="btn btn-primary">
-        <svg class="btn-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-        </svg>
-        Nouvelle analyse
-      </button>
-    </div>
-
-    <!-- Liste des analyses -->
-    <div class="analyses-grid">
-      <div
-        v-for="analyse in filteredAnalyses"
-        :key="analyse.id"
-        class="analyse-card"
-      >
-        <div class="analyse-header">
-          <h3 class="analyse-title">{{ analyse.nom }}</h3>
-          <span :class="`statut-badge statut-${analyse.statut}`">
-            {{ getStatutLabel(analyse.statut) }}
-          </span>
-      </div>
-
-        <div class="analyse-content">
-          <div class="analyse-info">
-            <div class="info-item">
-              <span class="info-label">Type:</span>
-              <span class="info-value">{{ getTypeLabel(analyse.type) }}</span>
-          </div>
-            <div class="info-item">
-              <span class="info-label">Début:</span>
-              <span class="info-value">{{ formatDate(analyse.dateDebut) }}</span>
-          </div>
-            <div v-if="analyse.dateFin" class="info-item">
-              <span class="info-label">Fin:</span>
-              <span class="info-value">{{ formatDate(analyse.dateFin) }}</span>
-        </div>
-      </div>
-
-          <div v-if="analyse.description" class="analyse-description">
-            {{ analyse.description }}
-        </div>
-      </div>
-
-        <div class="analyse-actions">
-          <button @click="openModal(analyse)" class="btn btn-secondary">
-            <svg class="btn-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-            </svg>
-            Modifier
-          </button>
-
-          <button @click="deleteAnalyse(analyse.id!)" class="btn btn-danger">
-            <svg class="btn-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-            </svg>
-            Supprimer
-          </button>
-        </div>
-      </div>
-    </div>
-
-    <!-- Modal -->
-    <div v-if="showModal" class="modal-overlay" @click="closeModal">
-      <div class="modal-content" @click.stop>
-        <div class="modal-header">
-          <h2 class="modal-title">{{ editingAnalyse ? 'Modifier l\'analyse' : 'Nouvelle analyse' }}</h2>
-          <button @click="closeModal" class="modal-close">
-            <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
+    <div class="header-content bg-white border-b border-gray-200 shadow-sm">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between">
+          <div class="flex items-center mb-4 sm:mb-0">
+            <div class="h-12 w-12 rounded-xl bg-gradient-to-r from-orange-500 to-orange-600 flex items-center justify-center shadow-lg mr-4">
+              <ChartBarIcon class="h-6 w-6 text-white" />
             </div>
-
-        <form @submit.prevent="saveAnalyse" class="modal-form">
-          <div class="form-group">
-            <label class="form-label">Nom de l'analyse *</label>
-            <input
-              v-model="newAnalyse.nom"
-              type="text"
-              required
-              class="form-input"
-              placeholder="Ex: Analyse qualité Q1 2024"
-          />
-        </div>
-
-          <div class="form-group">
-            <label class="form-label">Type *</label>
-            <select v-model="newAnalyse.type" required class="form-select">
-              <option value="qualite">Qualité</option>
-              <option value="performance">Performance</option>
-              <option value="cout">Coût</option>
-              <option value="rendement">Rendement</option>
-              <option value="autre">Autre</option>
-            </select>
-      </div>
-
-          <div class="form-group">
-            <label class="form-label">Description</label>
-            <textarea
-              v-model="newAnalyse.description"
-              class="form-textarea"
-              rows="3"
-              placeholder="Description de l'analyse..."
-            ></textarea>
+            <div>
+              <h1 class="page-title text-2xl font-bold text-gray-900">Analyses & Rapports</h1>
+              <p class="text-sm text-gray-600">Tableaux de bord et analyses détaillées</p>
             </div>
-
-          <div class="form-row">
-            <div class="form-group">
-              <label class="form-label">Date de début *</label>
-              <input
-                v-model="newAnalyse.dateDebut"
-                type="date"
-                required
-                class="form-input"
-              />
-            </div>
-
-            <div class="form-group">
-              <label class="form-label">Date de fin</label>
-              <input
-                v-model="newAnalyse.dateFin"
-                type="date"
-                class="form-input"
-          />
-        </div>
-      </div>
-
-          <div class="form-group">
-            <label class="form-label">Statut *</label>
-            <select v-model="newAnalyse.statut" required class="form-select">
-              <option value="en_cours">En cours</option>
-              <option value="termine">Terminé</option>
-              <option value="annule">Annulé</option>
-            </select>
-    </div>
-
-          <div class="form-group">
-            <label class="form-label">Résultats</label>
-            <textarea
-              v-model="newAnalyse.resultats"
-              class="form-textarea"
-              rows="4"
-              placeholder="Résultats de l'analyse..."
-            ></textarea>
           </div>
-
-          <div class="form-group">
-            <label class="form-label">Observations</label>
-            <textarea
-              v-model="newAnalyse.observations"
-              class="form-textarea"
-              rows="3"
-              placeholder="Observations..."
-            ></textarea>
-          </div>
-
-          <div class="form-group">
-            <label class="form-label">Recommandations</label>
-            <textarea
-              v-model="newAnalyse.recommandations"
-              class="form-textarea"
-              rows="3"
-              placeholder="Recommandations..."
-            ></textarea>
-    </div>
-
-          <div class="modal-actions">
-            <button type="button" @click="closeModal" class="btn btn-secondary">
-              Annuler
+          
+          <div class="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-3">
+            <button
+              @click="generatePdf"
+              :disabled="isLoading"
+              class="inline-flex items-center px-4 py-2 bg-gradient-to-r from-red-500 to-red-600 text-white font-medium rounded-xl shadow-lg hover:from-red-600 hover:to-red-700 transition-all duration-200 transform hover:scale-105 disabled:opacity-50"
+            >
+              <DocumentArrowDownIcon class="h-5 w-5 mr-2" />
+              PDF
             </button>
-            <button type="submit" class="btn btn-primary">
-              {{ editingAnalyse ? 'Mettre à jour' : 'Créer' }}
+            <button
+              @click="sendEmail"
+              :disabled="isLoading"
+              class="inline-flex items-center px-4 py-2 bg-gradient-to-r from-green-500 to-green-600 text-white font-medium rounded-xl shadow-lg hover:from-green-600 hover:to-green-700 transition-all duration-200 transform hover:scale-105 disabled:opacity-50"
+            >
+              <EnvelopeIcon class="h-5 w-5 mr-2" />
+              Email
             </button>
           </div>
-        </form>
+        </div>
+      </div>
     </div>
+
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      <!-- Contrôles de période -->
+      <div class="bg-white rounded-xl shadow-lg p-6 mb-6">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-4 sm:space-y-0">
+          <div class="flex items-center space-x-4">
+            <label class="text-sm font-medium text-gray-700">Période:</label>
+            <select
+              v-model="selectedPeriod"
+              @change="changePeriod"
+              class="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+            >
+              <option value="day">Aujourd'hui</option>
+              <option value="week">Cette semaine</option>
+              <option value="month">Ce mois</option>
+              <option value="year">Cette année</option>
+            </select>
+          </div>
+          
+          <div class="flex items-center space-x-4">
+            <label class="text-sm font-medium text-gray-700">Type de rapport:</label>
+            <select
+              v-model="reportType"
+              class="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+            >
+              <option value="production">Production</option>
+              <option value="delivery">Livraison</option>
+              <option value="general">Général</option>
+            </select>
+          </div>
+          
+          <button
+            @click="refreshData"
+            :disabled="isLoading"
+            class="inline-flex items-center px-4 py-2 bg-gradient-to-r from-orange-500 to-orange-600 text-white font-medium rounded-lg hover:from-blue-600 hover:to-blue-700 transition-all duration-200 disabled:opacity-50"
+          >
+            <ClockIcon class="h-4 w-4 mr-2" />
+            Actualiser
+          </button>
+        </div>
+      </div>
+
+      <!-- Onglets -->
+      <div class="bg-white rounded-xl shadow-lg overflow-hidden mb-6">
+        <div class="border-b border-gray-200">
+          <nav class="flex">
+            <button
+              @click="activeTab = 'overview'"
+              :class="[
+                'flex-1 px-6 py-4 text-sm font-medium text-center transition-all duration-200',
+                activeTab === 'overview'
+                  ? 'bg-gradient-to-r from-orange-500 to-orange-600 text-white border-b-2 border-blue-500'
+                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+              ]"
+            >
+              <ChartBarIcon class="h-5 w-5 mx-auto mb-2" />
+              Vue d'ensemble
+            </button>
+            <button
+              @click="activeTab = 'production'"
+              :class="[
+                'flex-1 px-6 py-4 text-sm font-medium text-center transition-all duration-200',
+                activeTab === 'production'
+                  ? 'bg-gradient-to-r from-orange-500 to-orange-600 text-white border-b-2 border-blue-500'
+                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+              ]"
+            >
+              <CubeIcon class="h-5 w-5 mx-auto mb-2" />
+              Production
+            </button>
+            <button
+              @click="activeTab = 'delivery'"
+              :class="[
+                'flex-1 px-6 py-4 text-sm font-medium text-center transition-all duration-200',
+                activeTab === 'delivery'
+                  ? 'bg-gradient-to-r from-orange-500 to-orange-600 text-white border-b-2 border-blue-500'
+                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+              ]"
+            >
+              <TruckIcon class="h-5 w-5 mx-auto mb-2" />
+              Livraison
+            </button>
+          </nav>
+        </div>
+
+        <!-- Contenu Vue d'ensemble -->
+        <div v-if="activeTab === 'overview'" class="p-6">
+          <h2 class="text-lg font-semibold text-gray-900 mb-6">Statistiques Générales - {{ periodLabel }}</h2>
+          
+          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <!-- Productions -->
+            <div class="stat-card bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden">
+              <div class="stat-content p-6">
+                <div class="flex items-center">
+                  <div class="h-12 w-12 rounded-xl bg-gradient-to-r from-orange-500 to-orange-600 flex items-center justify-center shadow-lg">
+                    <CubeIcon class="h-6 w-6 text-white" />
+                  </div>
+                  <div class="ml-4">
+                    <p class="text-sm font-medium text-gray-600">Productions</p>
+                    <p class="stat-value text-2xl font-bold text-gray-900">
+                      {{ formatNumber(generalStats.productions?.total || 0) }}
+                    </p>
+                    <p class="text-xs text-gray-500">{{ periodLabel }}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Livraisons -->
+            <div class="stat-card bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden">
+              <div class="stat-content p-6">
+                <div class="flex items-center">
+                  <div class="h-12 w-12 rounded-xl bg-gradient-to-r from-green-500 to-green-600 flex items-center justify-center shadow-lg">
+                    <TruckIcon class="h-6 w-6 text-white" />
+                  </div>
+                  <div class="ml-4">
+                    <p class="text-sm font-medium text-gray-600">Livraisons</p>
+                    <p class="stat-value text-2xl font-bold text-gray-900">
+                      {{ formatNumber(generalStats.livraisons?.total || 0) }}
+                    </p>
+                    <p class="text-xs text-gray-500">{{ periodLabel }}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Commandes -->
+            <div class="stat-card bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden">
+              <div class="stat-content p-6">
+                <div class="flex items-center">
+                  <div class="h-12 w-12 rounded-xl bg-gradient-to-r from-purple-500 to-purple-600 flex items-center justify-center shadow-lg">
+                    <UserGroupIcon class="h-6 w-6 text-white" />
+                  </div>
+                  <div class="ml-4">
+                    <p class="text-sm font-medium text-gray-600">Commandes</p>
+                    <p class="stat-value text-2xl font-bold text-gray-900">
+                      {{ formatNumber(generalStats.commandes?.total || 0) }}
+                    </p>
+                    <p class="text-xs text-gray-500">{{ periodLabel }}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Articles en Stock Critique -->
+            <div class="stat-card bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden">
+              <div class="stat-content p-6">
+                <div class="flex items-center">
+                  <div class="h-12 w-12 rounded-xl bg-gradient-to-r from-red-500 to-red-600 flex items-center justify-center shadow-lg">
+                    <ExclamationTriangleIcon class="h-6 w-6 text-white" />
+                  </div>
+                  <div class="ml-4">
+                    <p class="text-sm font-medium text-gray-600">Stock Critique</p>
+                    <p class="stat-value text-2xl font-bold text-gray-900">
+                      {{ formatNumber(generalStats.articles?.stock_critique || 0) }}
+                    </p>
+                    <p class="text-xs text-gray-500">articles</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Contenu Production -->
+        <div v-if="activeTab === 'production'" class="p-6">
+          <h2 class="text-lg font-semibold text-gray-900 mb-6">Analyse de Production - {{ periodLabel }}</h2>
+          
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+            <!-- Statistiques de production -->
+            <div class="bg-white border border-gray-200 rounded-xl shadow-lg p-6">
+              <h3 class="text-lg font-semibold text-gray-900 mb-4">Statistiques</h3>
+              <div class="space-y-4">
+                <div class="flex justify-between items-center">
+                  <span class="text-gray-600">Total Productions</span>
+                  <span class="font-bold text-lg">{{ formatNumber(productionStats.total_productions || 0) }}</span>
+                </div>
+                <div class="flex justify-between items-center">
+                  <span class="text-gray-600">Terminées</span>
+                  <span class="font-bold text-lg text-green-600">{{ formatNumber(productionStats.productions_terminees || 0) }}</span>
+                </div>
+                <div class="flex justify-between items-center">
+                  <span class="text-gray-600">En cours</span>
+                  <span class="font-bold text-lg text-orange-600">{{ formatNumber(productionStats.productions_en_cours || 0) }}</span>
+                </div>
+                <div class="flex justify-between items-center">
+                  <span class="text-gray-600">Ciment utilisé</span>
+                  <span class="font-bold text-lg">{{ formatNumber(productionStats.total_ciment_utilise || 0) }} kg</span>
+                </div>
+                <div class="flex justify-between items-center">
+                  <span class="text-gray-600">Adjuvant utilisé</span>
+                  <span class="font-bold text-lg">{{ formatNumber(productionStats.total_adjuvant_utilise || 0) }} kg</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Matériaux utilisés -->
+            <div class="bg-white border border-gray-200 rounded-xl shadow-lg p-6">
+              <h3 class="text-lg font-semibold text-gray-900 mb-4">Matériaux</h3>
+              <div class="space-y-4">
+                <div class="flex justify-between items-center">
+                  <span class="text-gray-600">Moyenne ciment/production</span>
+                  <span class="font-bold">{{ Math.round(productionStats.materiaux_utilises?.moyenne_ciment_par_production || 0) }} kg</span>
+                </div>
+                <div class="flex justify-between items-center">
+                  <span class="text-gray-600">Moyenne adjuvant/production</span>
+                  <span class="font-bold">{{ Math.round(productionStats.materiaux_utilises?.moyenne_adjuvant_par_production || 0) }} kg</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Tableau des productions par jour -->
+          <div v-if="productionStats.productions_par_jour?.length > 0" class="bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden">
+            <div class="px-6 py-4 border-b border-gray-200">
+              <h3 class="text-lg font-semibold text-gray-900">Productions par Jour</h3>
+            </div>
+            <div class="overflow-x-auto">
+              <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                  <tr>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Productions</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ciment (kg)</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Adjuvant (kg)</th>
+                  </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                  <tr v-for="jour in productionStats.productions_par_jour" :key="jour.date">
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      {{ new Date(jour.date).toLocaleDateString('fr-FR') }}
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                      {{ jour.count }}
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      {{ jour.ciment_total || 0 }}
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      {{ jour.adjuvant_total || 0 }}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- Contenu Livraison -->
+        <div v-if="activeTab === 'delivery'" class="p-6">
+          <h2 class="text-lg font-semibold text-gray-900 mb-6">Analyse de Livraison - {{ periodLabel }}</h2>
+          
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+            <!-- Statistiques de livraison -->
+            <div class="bg-white border border-gray-200 rounded-xl shadow-lg p-6">
+              <h3 class="text-lg font-semibold text-gray-900 mb-4">Statistiques</h3>
+              <div class="space-y-4">
+                <div class="flex justify-between items-center">
+                  <span class="text-gray-600">Total Livraisons</span>
+                  <span class="font-bold text-lg">{{ formatNumber(deliveryStats.total_livraisons || 0) }}</span>
+                </div>
+                <div class="flex justify-between items-center">
+                  <span class="text-gray-600">Terminées</span>
+                  <span class="font-bold text-lg text-green-600">{{ formatNumber(deliveryStats.livraisons_terminees || 0) }}</span>
+                </div>
+                <div class="flex justify-between items-center">
+                  <span class="text-gray-600">En cours</span>
+                  <span class="font-bold text-lg text-orange-600">{{ formatNumber(deliveryStats.livraisons_en_cours || 0) }}</span>
+                </div>
+                <div class="flex justify-between items-center">
+                  <span class="text-gray-600">Quantité livrée</span>
+                  <span class="font-bold text-lg">{{ formatNumber(deliveryStats.total_quantite_livree || 0) }}</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Top produits livrés -->
+            <div class="bg-white border border-gray-200 rounded-xl shadow-lg p-6">
+              <h3 class="text-lg font-semibold text-gray-900 mb-4">Top Produits Livrés</h3>
+              <div class="space-y-3">
+                <div
+                  v-for="(produit, index) in deliveryStats.top_produits_livres?.slice(0, 5)"
+                  :key="produit.nom"
+                  class="flex justify-between items-center"
+                >
+                  <span class="text-sm text-gray-600">{{ index + 1 }}. {{ produit.nom }}</span>
+                  <span class="font-bold text-sm">{{ formatNumber(produit.quantite_totale) }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Tableau des livraisons par jour -->
+          <div v-if="deliveryStats.livraisons_par_jour?.length > 0" class="bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden">
+            <div class="px-6 py-4 border-b border-gray-200">
+              <h3 class="text-lg font-semibold text-gray-900">Livraisons par Jour</h3>
+            </div>
+            <div class="overflow-x-auto">
+              <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                  <tr>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Livraisons</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Quantité Totale</th>
+                  </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                  <tr v-for="jour in deliveryStats.livraisons_par_jour" :key="jour.date">
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      {{ new Date(jour.date).toLocaleDateString('fr-FR') }}
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                      {{ jour.count }}
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      {{ jour.total_quantite || 0 }}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 </template>
 
-<script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
-import { useLaravelApi } from '@/services/laravelApiService'
-
-const { getAnalyses } = useLaravelApi()
-
-// État réactif
-const analyses = ref<any[]>([])
-const showModal = ref(false)
-const editingAnalyse = ref<any | null>(null)
-const searchTerm = ref('')
-const selectedType = ref('')
-const selectedStatut = ref('')
-
-const newAnalyse = ref<any>({
-  nom: '',
-  type: 'qualite',
-  description: '',
-  dateDebut: new Date().toISOString().split('T')[0],
-  dateFin: '',
-  statut: 'en_cours',
-  resultats: '',
-  observations: '',
-  recommandations: '',
-  donnees: {},
-  dateAnalyse: new Date().toISOString()
-})
-
-// Computed
-const analysesEnCours = computed(() => 
-  analyses.value.filter(a => a.statut === 'en_cours').length
-)
-
-const analysesTerminees = computed(() => 
-  analyses.value.filter(a => a.statut === 'termine').length
-)
-
-const filteredAnalyses = computed(() => {
-  return analyses.value.filter(analyse => {
-    const matchesSearch = analyse.nom.toLowerCase().includes(searchTerm.value.toLowerCase()) ||
-                         analyse.description?.toLowerCase().includes(searchTerm.value.toLowerCase())
-    const matchesType = !selectedType.value || analyse.type === selectedType.value
-    const matchesStatut = !selectedStatut.value || analyse.statut === selectedStatut.value
-    
-    return matchesSearch && matchesType && matchesStatut
-  })
-})
-
-// Méthodes
-const loadAnalyses = async () => {
-  try {
-    console.log('🔍 [AnalysesView] Chargement des analyses...')
-    analyses.value = await getAnalyses()
-    console.log('✅ [AnalysesView] Analyses chargées:', analyses.value.length)
-  } catch (error) {
-    console.error('❌ [AnalysesView] Erreur lors du chargement des analyses:', error)
-  }
-}
-
-const openModal = (analyse?: any) => {
-  if (analyse) {
-    editingAnalyse.value = analyse
-    newAnalyse.value = {
-      nom: analyse.nom,
-      type: analyse.type,
-      description: analyse.description || '',
-      dateDebut: analyse.dateDebut,
-      dateFin: analyse.dateFin || '',
-      statut: analyse.statut,
-      resultats: analyse.resultats || '',
-      observations: analyse.observations || '',
-      recommandations: analyse.recommandations || '',
-      donnees: analyse.donnees || {},
-      dateAnalyse: analyse.dateAnalyse || new Date().toISOString()
-    }
-  } else {
-    editingAnalyse.value = null
-    newAnalyse.value = {
-      nom: '',
-      type: 'qualite',
-      description: '',
-      dateDebut: new Date().toISOString().split('T')[0],
-      dateFin: '',
-      statut: 'en_cours',
-      resultats: '',
-      observations: '',
-      recommandations: '',
-      donnees: {},
-      dateAnalyse: new Date().toISOString()
-    }
-  }
-  showModal.value = true
-}
-
-const closeModal = () => {
-  showModal.value = false
-  editingAnalyse.value = null
-}
-
-const saveAnalyse = async () => {
-  try {
-    console.log('💾 [AnalysesView] Sauvegarde de l\'analyse...')
-    
-    if (editingAnalyse.value) {
-      await updateAnalyse(editingAnalyse.value.id!, newAnalyse.value)
-      console.log('✅ [AnalysesView] Analyse mise à jour')
-    } else {
-      await addAnalyse(newAnalyse.value)
-      console.log('✅ [AnalysesView] Analyse créée')
-    }
-    
-    await loadAnalyses()
-    closeModal()
-  } catch (error) {
-    console.error('❌ [AnalysesView] Erreur lors de la sauvegarde:', error)
-  }
-}
-
-const deleteAnalyse = async (id: string) => {
-  if (confirm('Êtes-vous sûr de vouloir supprimer cette analyse ?')) {
-    try {
-      console.log('🗑️ [AnalysesView] Suppression de l\'analyse:', id)
-      await deleteAnalyseService(Number(id))
-      await loadAnalyses()
-      console.log('✅ [AnalysesView] Analyse supprimée')
-    } catch (error) {
-      console.error('❌ [AnalysesView] Erreur lors de la suppression:', error)
-    }
-  }
-}
-
-const getStatutLabel = (statut: string) => {
-  const labels: Record<string, string> = {
-    'en_cours': 'En cours',
-    'termine': 'Terminé',
-    'annule': 'Annulé'
-  }
-  return labels[statut] || statut
-}
-
-const getTypeLabel = (type: string) => {
-  const labels: Record<string, string> = {
-    'qualite': 'Qualité',
-    'performance': 'Performance',
-    'cout': 'Coût',
-    'rendement': 'Rendement',
-    'autre': 'Autre'
-  }
-  return labels[type] || type
-}
-
-const formatDate = (date: string) => {
-  return new Date(date).toLocaleDateString('fr-FR')
-}
-
-// Lifecycle
-onMounted(() => {
-  loadAnalyses()
-})
-</script>
-
 <style scoped>
 .analyses-container {
-  padding: 2rem;
-  max-width: 1200px;
-  margin: 0 auto;
+  min-height: 100vh;
 }
 
-.analyses-header {
-  margin-bottom: 2rem;
-}
-
-.analyses-title {
-  font-size: 2rem;
-  font-weight: bold;
+.page-title {
+  font-size: 1.875rem;
+  line-height: 2.25rem;
+  font-weight: 700;
   color: #111827;
-  margin-bottom: 0.5rem;
-}
-
-.analyses-subtitle {
-  color: #6b7280;
-  font-size: 1.1rem;
-}
-
-.analyses-stats {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 1rem;
-  margin-bottom: 2rem;
 }
 
 .stat-card {
   background: white;
-  border-radius: 0.5rem;
-  padding: 1.5rem;
-  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
-  display: flex;
-  align-items: center;
-  gap: 1rem;
+  border-radius: 0.75rem;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+  transition: all 0.2s;
+  transform: scale(1);
 }
 
-.stat-icon {
-  width: 3rem;
-  height: 3rem;
-  background: #f3f4f6;
-  border-radius: 0.5rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #6b7280;
+.stat-card:hover {
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+  transform: scale(1.02);
 }
 
 .stat-content {
-  flex: 1;
+  padding: 1.5rem;
 }
 
 .stat-value {
   font-size: 1.5rem;
-  font-weight: bold;
+  line-height: 2rem;
+  font-weight: 700;
   color: #111827;
 }
 
-.stat-label {
-  color: #6b7280;
-  font-size: 0.875rem;
-}
-
-.analyses-filters {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 1rem;
-  margin-bottom: 2rem;
-  background: white;
-  padding: 1.5rem;
-  border-radius: 0.5rem;
-  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
-}
-
-.filter-group {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-.filter-label {
-  font-weight: 500;
-  color: #374151;
-  font-size: 0.875rem;
-}
-
-.filter-input,
-.filter-select {
-  padding: 0.5rem;
-  border: 1px solid #d1d5db;
-  border-radius: 0.375rem;
-  font-size: 0.875rem;
-}
-
-.filter-input:focus,
-.filter-select:focus {
-  outline: none;
-  border-color: #3b82f6;
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
-}
-
-.analyses-actions {
-  margin-bottom: 2rem;
-}
-
-.btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.75rem 1rem;
-  border-radius: 0.375rem;
-  font-weight: 500;
-  text-decoration: none;
-  border: none;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.btn-primary {
-  background: #3b82f6;
-  color: white;
-}
-
-.btn-primary:hover {
-  background: #2563eb;
-}
-
-.btn-secondary {
-  background: #6b7280;
-  color: white;
-}
-
-.btn-secondary:hover {
-  background: #4b5563;
-}
-
-.btn-danger {
-  background: #ef4444;
-  color: white;
-}
-
-.btn-danger:hover {
-  background: #dc2626;
-}
-
-.btn-icon {
-  width: 1rem;
-  height: 1rem;
-}
-
-.analyses-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
-  gap: 1.5rem;
-}
-
-.analyse-card {
-  background: white;
-  border-radius: 0.5rem;
-  padding: 1.5rem;
-  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
-  transition: box-shadow 0.2s;
-}
-
-.analyse-card:hover {
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-}
-
-.analyse-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 1rem;
-}
-
-.analyse-title {
-  font-size: 1.125rem;
-  font-weight: 600;
-  color: #111827;
-  margin: 0;
-}
-
-.statut-badge {
-  padding: 0.25rem 0.75rem;
-  border-radius: 9999px;
-  font-size: 0.75rem;
-  font-weight: 500;
-}
-
-.statut-en_cours {
-  background: #fef3c7;
-  color: #92400e;
-}
-
-.statut-termine {
-  background: #d1fae5;
-  color: #065f46;
-}
-
-.statut-annule {
-  background: #fee2e2;
-  color: #991b1b;
-}
-
-.analyse-content {
-  margin-bottom: 1.5rem;
-}
-
-.analyse-info {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  margin-bottom: 1rem;
-}
-
-.info-item {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.info-label {
-  font-weight: 500;
-  color: #6b7280;
-  font-size: 0.875rem;
-}
-
-.info-value {
-  color: #111827;
-  font-size: 0.875rem;
-}
-
-.analyse-description {
-  color: #6b7280;
-  font-size: 0.875rem;
-  line-height: 1.5;
-}
-
-.analyse-actions {
-  display: flex;
-  gap: 0.5rem;
-}
-
-.modal-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-}
-
-.modal-content {
-  background: white;
-  border-radius: 0.5rem;
-  width: 90%;
-  max-width: 600px;
-  max-height: 90vh;
-  overflow-y: auto;
-}
-
-.modal-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 1.5rem;
-  border-bottom: 1px solid #e5e7eb;
-}
-
-.modal-title {
-  font-size: 1.25rem;
-  font-weight: 600;
-  color: #111827;
-  margin: 0;
-}
-
-.modal-close {
-  background: none;
-  border: none;
-  cursor: pointer;
-  padding: 0.5rem;
-  color: #6b7280;
-}
-
-.modal-close:hover {
-  color: #374151;
-}
-
-.modal-form {
-  padding: 1.5rem;
-}
-
-.form-group {
-  margin-bottom: 1rem;
-}
-
-.form-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-    gap: 1rem;
+/* Responsive design */
+@media (max-width: 768px) {
+  .page-title {
+    font-size: 1.5rem;
+    line-height: 2rem;
   }
 
-.form-label {
-  display: block;
-  font-weight: 500;
-  color: #374151;
-  margin-bottom: 0.5rem;
-  font-size: 0.875rem;
+  .stat-content {
+    padding: 1rem;
+  }
+
+  .stat-value {
+    font-size: 1.25rem;
+  }
 }
 
-.form-input,
-.form-select,
-.form-textarea {
-  width: 100%;
-  padding: 0.5rem;
-  border: 1px solid #d1d5db;
-  border-radius: 0.375rem;
-  font-size: 0.875rem;
-}
+@media (max-width: 480px) {
+  .page-title {
+    font-size: 1.25rem;
+    line-height: 1.75rem;
+  }
 
-.form-input:focus,
-.form-select:focus,
-.form-textarea:focus {
-  outline: none;
-  border-color: #3b82f6;
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
-}
+  .stat-content {
+    padding: 0.75rem;
+  }
 
-.form-textarea {
-  resize: vertical;
-  min-height: 80px;
-}
-
-.modal-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 1rem;
-  margin-top: 2rem;
-  padding-top: 1rem;
-  border-top: 1px solid #e5e7eb;
+  .stat-value {
+    font-size: 1.125rem;
+  }
 }
 </style>

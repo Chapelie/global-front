@@ -71,6 +71,51 @@ interface LaravelConsommable {
   updated_at: string
 }
 
+interface LaravelCiment {
+  id: number
+  nom: string
+  type: string
+  marque: string
+  classe_resistance?: string
+  prix_unitaire: number
+  unite: string
+  stock_actuel: number
+  seuil_critique: number
+  fournisseur?: string
+  numero_lot?: string
+  date_reception?: string
+  date_expiration?: string
+  specifications?: any
+  notes?: string
+  actif: boolean
+  user_id: number
+  created_at: string
+  updated_at: string
+}
+
+interface LaravelAdjuvant {
+  id: number
+  nom: string
+  type: string
+  marque: string
+  fonction?: string
+  dosage_recommandee?: number
+  prix_unitaire: number
+  unite: string
+  stock_actuel: number
+  seuil_critique: number
+  fournisseur?: string
+  numero_lot?: string
+  date_reception?: string
+  date_expiration?: string
+  specifications?: any
+  notes?: string
+  actif: boolean
+  user_id: number
+  created_at: string
+  updated_at: string
+}
+
 interface LaravelCommande {
   id: number
   numero_commande: string
@@ -150,6 +195,9 @@ interface LaravelProduction {
   heure_debut?: string
   heure_fin?: string
   user_id: number
+  quantite_ciment?: number
+  quantite_adjuvant?: number
+  notes?: string
   created_at: string
   updated_at: string
   // Propriétés étendues pour compatibilité
@@ -158,10 +206,6 @@ interface LaravelProduction {
     quantiteProduite: number
     unite: string
   }>
-  tempsEffectif?: number
-  rendement?: number
-  coutProduction?: number
-  notes?: string
 }
 
 interface LaravelDocument {
@@ -621,46 +665,6 @@ class LaravelApiService {
     }
   }
 
-  // ===== UTILISATEURS =====
-  getUsers = async (): Promise<LaravelUser[]> => {
-    try {
-      const response = await this.api.get<{ data: LaravelUser[] }>('/users')
-      return response.data.data || []
-    } catch (error) {
-      console.error('Erreur lors de la récupération des utilisateurs:', error)
-      return []
-    }
-  }
-
-  createUser = async (userData: Omit<LaravelUser, 'id' | 'created_at' | 'updated_at'> & { password: string }): Promise<LaravelUser | null> => {
-    try {
-      const response = await this.api.post<{ data: LaravelUser }>('/users', userData)
-      return response.data.data || null
-    } catch (error) {
-      console.error('Erreur lors de la création de l\'utilisateur:', error)
-      throw error
-    }
-  }
-
-  updateUser = async (id: number, userData: Partial<LaravelUser>): Promise<LaravelUser | null> => {
-    try {
-      const response = await this.api.put<{ data: LaravelUser }>(`/users/${id}`, userData)
-      return response.data.data || null
-    } catch (error) {
-      console.error('Erreur lors de la mise à jour de l\'utilisateur:', error)
-      throw error
-    }
-  }
-
-  deleteUser = async (id: number): Promise<boolean> => {
-    try {
-      await this.api.delete(`/users/${id}`)
-      return true
-    } catch (error) {
-      console.error('Erreur lors de la suppression de l\'utilisateur:', error)
-      return false
-    }
-  }
 
   // ===== DOCUMENTS =====
   getDocuments = async (): Promise<LaravelDocument[]> => {
@@ -837,6 +841,371 @@ class LaravelApiService {
       return response.data.data || null
     } catch (error) {
       console.error('Erreur lors de l\'ajout du document:', error)
+      throw error
+    }
+  }
+
+  // ===== CIMENTS =====
+  getCiments = async (): Promise<LaravelCiment[]> => {
+    try {
+      const response = await this.api.get<LaravelCiment[]>('/ciments')
+      return response.data || []
+    } catch (error) {
+      console.error('Erreur lors de la récupération des ciments:', error)
+      return []
+    }
+  }
+
+  getCiment = async (id: number): Promise<LaravelCiment | null> => {
+    try {
+      const response = await this.api.get<LaravelCiment>(`/ciments/${id}`)
+      return response.data || null
+    } catch (error) {
+      console.error('Erreur lors de la récupération du ciment:', error)
+      return null
+    }
+  }
+
+  addCiment = async (data: Partial<LaravelCiment>): Promise<LaravelCiment | null> => {
+    try {
+      const response = await this.api.post<LaravelCiment>('/ciments', data)
+      return response.data || null
+    } catch (error) {
+      console.error('Erreur lors de l\'ajout du ciment:', error)
+      throw error
+    }
+  }
+
+  updateCiment = async (id: number, data: Partial<LaravelCiment>): Promise<LaravelCiment | null> => {
+    try {
+      const response = await this.api.put<LaravelCiment>(`/ciments/${id}`, data)
+      return response.data || null
+    } catch (error) {
+      console.error('Erreur lors de la mise à jour du ciment:', error)
+      throw error
+    }
+  }
+
+  deleteCiment = async (id: number): Promise<boolean> => {
+    try {
+      await this.api.delete(`/ciments/${id}`)
+      return true
+    } catch (error) {
+      console.error('Erreur lors de la suppression du ciment:', error)
+      return false
+    }
+  }
+
+  getCimentsStockCritique = async (): Promise<LaravelCiment[]> => {
+    try {
+      const response = await this.api.get<LaravelCiment[]>('/ciments/stock-critique')
+      return response.data || []
+    } catch (error) {
+      console.error('Erreur lors de la récupération des ciments en stock critique:', error)
+      return []
+    }
+  }
+
+  getCimentsExpires = async (jours: number = 30): Promise<LaravelCiment[]> => {
+    try {
+      const response = await this.api.get<LaravelCiment[]>(`/ciments/expires?jours=${jours}`)
+      return response.data || []
+    } catch (error) {
+      console.error('Erreur lors de la récupération des ciments expirés:', error)
+      return []
+    }
+  }
+
+  updateCimentStock = async (id: number, type: string, quantite: number, motif?: string, notes?: string): Promise<any> => {
+    try {
+      const response = await this.api.put(`/ciments/${id}/stock`, {
+        type,
+        quantite,
+        motif,
+        notes
+      })
+      return response.data || null
+    } catch (error) {
+      console.error('Erreur lors de la mise à jour du stock du ciment:', error)
+      throw error
+    }
+  }
+
+  getCimentStockHistory = async (id: number): Promise<any[]> => {
+    try {
+      const response = await this.api.get<any[]>(`/ciments/${id}/stock-history`)
+      return response.data || []
+    } catch (error) {
+      console.error('Erreur lors de la récupération de l\'historique du stock:', error)
+      return []
+    }
+  }
+
+  // ===== ADJUVANTS =====
+  getAdjuvants = async (): Promise<LaravelAdjuvant[]> => {
+    try {
+      const response = await this.api.get<LaravelAdjuvant[]>('/adjuvants')
+      return response.data || []
+    } catch (error) {
+      console.error('Erreur lors de la récupération des adjuvants:', error)
+      return []
+    }
+  }
+
+  getAdjuvant = async (id: number): Promise<LaravelAdjuvant | null> => {
+    try {
+      const response = await this.api.get<LaravelAdjuvant>(`/adjuvants/${id}`)
+      return response.data || null
+    } catch (error) {
+      console.error('Erreur lors de la récupération de l\'adjuvant:', error)
+      return null
+    }
+  }
+
+  addAdjuvant = async (data: Partial<LaravelAdjuvant>): Promise<LaravelAdjuvant | null> => {
+    try {
+      const response = await this.api.post<LaravelAdjuvant>('/adjuvants', data)
+      return response.data || null
+    } catch (error) {
+      console.error('Erreur lors de l\'ajout de l\'adjuvant:', error)
+      throw error
+    }
+  }
+
+  updateAdjuvant = async (id: number, data: Partial<LaravelAdjuvant>): Promise<LaravelAdjuvant | null> => {
+    try {
+      const response = await this.api.put<LaravelAdjuvant>(`/adjuvants/${id}`, data)
+      return response.data || null
+    } catch (error) {
+      console.error('Erreur lors de la mise à jour de l\'adjuvant:', error)
+      throw error
+    }
+  }
+
+  deleteAdjuvant = async (id: number): Promise<boolean> => {
+    try {
+      await this.api.delete(`/adjuvants/${id}`)
+      return true
+    } catch (error) {
+      console.error('Erreur lors de la suppression de l\'adjuvant:', error)
+      return false
+    }
+  }
+
+  getAdjuvantsStockCritique = async (): Promise<LaravelAdjuvant[]> => {
+    try {
+      const response = await this.api.get<LaravelAdjuvant[]>('/adjuvants/stock-critique')
+      return response.data || []
+    } catch (error) {
+      console.error('Erreur lors de la récupération des adjuvants en stock critique:', error)
+      return []
+    }
+  }
+
+  getAdjuvantsExpires = async (jours: number = 30): Promise<LaravelAdjuvant[]> => {
+    try {
+      const response = await this.api.get<LaravelAdjuvant[]>(`/adjuvants/expires?jours=${jours}`)
+      return response.data || []
+    } catch (error) {
+      console.error('Erreur lors de la récupération des adjuvants expirés:', error)
+      return []
+    }
+  }
+
+  getAdjuvantsParType = async (type: string): Promise<LaravelAdjuvant[]> => {
+    try {
+      const response = await this.api.get<LaravelAdjuvant[]>(`/adjuvants/type/${type}`)
+      return response.data || []
+    } catch (error) {
+      console.error('Erreur lors de la récupération des adjuvants par type:', error)
+      return []
+    }
+  }
+
+  updateAdjuvantStock = async (id: number, type: string, quantite: number, motif?: string, notes?: string): Promise<any> => {
+    try {
+      const response = await this.api.put(`/adjuvants/${id}/stock`, {
+        type,
+        quantite,
+        motif,
+        notes
+      })
+      return response.data || null
+    } catch (error) {
+      console.error('Erreur lors de la mise à jour du stock de l\'adjuvant:', error)
+      throw error
+    }
+  }
+
+  getAdjuvantStockHistory = async (id: number): Promise<any[]> => {
+    try {
+      const response = await this.api.get<any[]>(`/adjuvants/${id}/stock-history`)
+      return response.data || []
+    } catch (error) {
+      console.error('Erreur lors de la récupération de l\'historique du stock:', error)
+      return []
+    }
+  }
+
+  getAdjuvantsStatistics = async (): Promise<any> => {
+    try {
+      const response = await this.api.get<any>('/adjuvants/statistics')
+      return response.data || {}
+    } catch (error) {
+      console.error('Erreur lors de la récupération des statistiques des adjuvants:', error)
+      return {}
+    }
+  }
+
+  // ===== UTILISATEURS =====
+  getUsers = async (): Promise<LaravelUser[]> => {
+    try {
+      const response = await this.api.get<LaravelUser[]>('/users')
+      return response.data || []
+    } catch (error) {
+      console.error('Erreur lors de la récupération des utilisateurs:', error)
+      return []
+    }
+  }
+
+  getUser = async (id: number): Promise<LaravelUser | null> => {
+    try {
+      const response = await this.api.get<LaravelUser>(`/users/${id}`)
+      return response.data || null
+    } catch (error) {
+      console.error('Erreur lors de la récupération de l\'utilisateur:', error)
+      return null
+    }
+  }
+
+  addUser = async (data: Partial<LaravelUser>): Promise<LaravelUser | null> => {
+    try {
+      const response = await this.api.post<LaravelUser>('/users', data)
+      return response.data || null
+    } catch (error) {
+      console.error('Erreur lors de l\'ajout de l\'utilisateur:', error)
+      throw error
+    }
+  }
+
+  updateUser = async (id: number, data: Partial<LaravelUser>): Promise<LaravelUser | null> => {
+    try {
+      const response = await this.api.put<LaravelUser>(`/users/${id}`, data)
+      return response.data || null
+    } catch (error) {
+      console.error('Erreur lors de la mise à jour de l\'utilisateur:', error)
+      throw error
+    }
+  }
+
+  deleteUser = async (id: number): Promise<boolean> => {
+    try {
+      await this.api.delete(`/users/${id}`)
+      return true
+    } catch (error) {
+      console.error('Erreur lors de la suppression de l\'utilisateur:', error)
+      return false
+    }
+  }
+
+  // ===== RÔLES =====
+  getRoles = async (): Promise<any[]> => {
+    try {
+      const response = await this.api.get<any[]>('/roles')
+      return response.data || []
+    } catch (error) {
+      console.error('Erreur lors de la récupération des rôles:', error)
+      return []
+    }
+  }
+
+  getRole = async (id: number): Promise<any | null> => {
+    try {
+      const response = await this.api.get<any>(`/roles/${id}`)
+      return response.data || null
+    } catch (error) {
+      console.error('Erreur lors de la récupération du rôle:', error)
+      return null
+    }
+  }
+
+  createRole = async (data: any): Promise<any | null> => {
+    try {
+      const response = await this.api.post<any>('/roles', data)
+      return response.data || null
+    } catch (error) {
+      console.error('Erreur lors de la création du rôle:', error)
+      throw error
+    }
+  }
+
+  updateRole = async (id: number, data: any): Promise<any | null> => {
+    try {
+      const response = await this.api.put<any>(`/roles/${id}`, data)
+      return response.data || null
+    } catch (error) {
+      console.error('Erreur lors de la mise à jour du rôle:', error)
+      throw error
+    }
+  }
+
+  deleteRole = async (id: number): Promise<boolean> => {
+    try {
+      await this.api.delete(`/roles/${id}`)
+      return true
+    } catch (error) {
+      console.error('Erreur lors de la suppression du rôle:', error)
+      return false
+    }
+  }
+
+  // ===== ANALYSES ET RAPPORTS =====
+  getGeneralStats = async (): Promise<any> => {
+    try {
+      const response = await this.api.get<any>('/analyses/stats')
+      return response.data || {}
+    } catch (error) {
+      console.error('Erreur lors de la récupération des statistiques générales:', error)
+      return {}
+    }
+  }
+
+  getProductionStats = async (params?: any): Promise<any> => {
+    try {
+      const response = await this.api.get<any>('/analyses/production', { params })
+      return response.data || {}
+    } catch (error) {
+      console.error('Erreur lors de la récupération des statistiques de production:', error)
+      return {}
+    }
+  }
+
+  getDeliveryStats = async (params?: any): Promise<any> => {
+    try {
+      const response = await this.api.get<any>('/analyses/delivery', { params })
+      return response.data || {}
+    } catch (error) {
+      console.error('Erreur lors de la récupération des statistiques de livraison:', error)
+      return {}
+    }
+  }
+
+  generatePdfReport = async (params: any): Promise<any> => {
+    try {
+      const response = await this.api.post<any>('/analyses/pdf', params)
+      return response.data || {}
+    } catch (error) {
+      console.error('Erreur lors de la génération du rapport PDF:', error)
+      throw error
+    }
+  }
+
+  sendEmailReport = async (params: any): Promise<any> => {
+    try {
+      const response = await this.api.post<any>('/analyses/email', params)
+      return response.data || {}
+    } catch (error) {
+      console.error('Erreur lors de l\'envoi du rapport par email:', error)
       throw error
     }
   }

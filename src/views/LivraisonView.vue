@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, nextTick } from 'vue'
 import { useLaravelApi, type LaravelLivraison, type LaravelArticle } from '../services/laravelApiService'
+import { useAlert } from '../composables/useAlert'
 
 // Type étendu pour la livraison avec les propriétés supplémentaires utilisées dans la vue
 interface ExtendedLivraison extends LaravelLivraison {
@@ -15,7 +16,19 @@ import BordereauViewer from '../components/BordereauViewer.vue'
 import BLGenerator from '../components/BLGenerator.vue'
 
 // Service Laravel
-const { getLivraisons, addLivraison, updateLivraison, deleteLivraison, getArticles } = useLaravelApi()
+const { 
+  getLivraisons, 
+  addLivraison, 
+  updateLivraison, 
+  deleteLivraison, 
+  getArticles,
+  mettreAJourQuantitesLivrees,
+  commencerLivraisonAPI,
+  finaliserLivraisonAvecSignature
+} = useLaravelApi()
+
+// Service d'alerte
+const { success, error, warning, info, confirmDialog } = useAlert()
 
 // État réactif
 const livraisons = ref<ExtendedLivraison[]>([])
@@ -23,10 +36,14 @@ const showModal = ref(false)
 const showCommencerModal = ref(false)
 const showBordereauModal = ref(false)
 const showBLGenerator = ref(false)
+const showQuantiteModal = ref(false)
+const showDocumenterModal = ref(false)
 const editingLivraison = ref<LaravelLivraison | null>(null)
 const selectedLivraison = ref<LaravelLivraison | null>(null)
 const selectedBordereauLivraison = ref<LaravelLivraison | null>(null)
 const selectedBLLivraison = ref<LaravelLivraison | null>(null)
+const selectedQuantiteLivraison = ref<LaravelLivraison | null>(null)
+const selectedDocumenterLivraison = ref<LaravelLivraison | null>(null)
 const activeTab = ref<'nonTerminees' | 'terminees'>('nonTerminees')
 
 // Nouvelle livraison
@@ -112,8 +129,22 @@ const loadLivraisons = async () => {
     console.log('🔍 [LivraisonView] Chargement des livraisons depuis Laravel')
     livraisons.value = await getLivraisons()
     console.log('✅ [LivraisonView] Livraisons chargées:', livraisons.value.length)
-  } catch (error) {
-    console.error('❌ [LivraisonView] Erreur lors du chargement des livraisons:', error)
+    
+    // Debug: Afficher les détails des produits pour chaque livraison
+    livraisons.value.forEach((livraison, index) => {
+      console.log(`🔍 [LivraisonView] Livraison ${index + 1} (${livraison.numero_bl}):`, {
+        statut: livraison.statut,
+        produits: livraison.produits?.map(p => ({
+          nom: p.nom,
+          quantiteCommandee: p.quantiteCommandee,
+          quantiteLivree: p.quantiteLivree,
+          quantite: p.quantite
+        }))
+      })
+    })
+  } catch (err) {
+    console.error('❌ [LivraisonView] Erreur lors du chargement des livraisons:', err)
+    await error('Erreur lors du chargement des livraisons')
   }
 }
 
@@ -204,10 +235,10 @@ const saveLivraison = async () => {
     
     await loadLivraisons()
     closeModal()
-    alert('Livraison enregistrée avec succès!')
-  } catch (error) {
-    console.error('❌ [LivraisonView] Erreur lors de la sauvegarde:', error)
-    alert('Erreur lors de la sauvegarde de la livraison')
+    await success('Livraison enregistrée avec succès!')
+  } catch (err) {
+    console.error('❌ [LivraisonView] Erreur lors de la sauvegarde:', err)
+    await error('Erreur lors de la sauvegarde de la livraison')
   }
 }
 
@@ -359,6 +390,25 @@ const getPourcentageLivraison = (livraison: ExtendedLivraison) => {
   }, 0)
 
   return totalCommandee > 0 ? Math.round((totalLivree / totalCommandee) * 100) : 0
+}
+
+// Fonction pour obtenir les quantités restantes à livrer
+const getQuantitesRestantes = (livraison: ExtendedLivraison) => {
+  if (!livraison.produits) return []
+  
+  return livraison.produits.map(produit => {
+    const commandee = produit.quantiteCommandee || produit.quantite || 0
+    const livree = produit.quantiteLivree || 0
+    const restante = Math.max(0, commandee - livree)
+    
+    return {
+      nom: produit.nom,
+      unite: produit.unite,
+      commandee,
+      livree,
+      restante
+    }
+  }).filter(item => item.restante > 0)
 }
 
 const telechargerBL = (livraison: ExtendedLivraison) => {
@@ -632,28 +682,38 @@ const confirmerCommencerLivraison = async () => {
 
     // Validation des quantités
     let hasError = false
-    const produitsLivraison = selectedLivraison.value.produits.map(produit => {
+    let errorMessage = ''
+    
+    for (const produit of selectedLivraison.value.produits) {
       const quantiteLivree = quantitesLivraison.value[produit.nom] || 0
       const quantiteCommandee = produit.quantiteCommandee || produit.quantite || 0
 
       if (quantiteLivree > quantiteCommandee) {
-        alert(`Erreur: La quantité livrée pour "${produit.nom}" (${quantiteLivree}) dépasse la quantité commandée (${quantiteCommandee})`)
+        errorMessage = `Erreur: La quantité livrée pour "${produit.nom}" (${quantiteLivree}) dépasse la quantité commandée (${quantiteCommandee})`
         hasError = true
-        return null
+        break
       }
+    }
+
+    if (hasError) {
+      await error(errorMessage)
+      return
+    }
+
+    const produitsLivraison = selectedLivraison.value.produits.map(produit => {
+      const quantiteLivree = quantitesLivraison.value[produit.nom] || 0
+      const quantiteCommandee = produit.quantiteCommandee || produit.quantite || 0
 
       return {
         ...produit,
         quantiteLivree,
         difference: quantiteCommandee - quantiteLivree
       }
-    }).filter(Boolean)
-
-    if (hasError) return
+    })
 
     // Vérification de la signature
     if (!signatureClient.value) {
-      alert('Veuillez signer avant de finaliser la livraison')
+      await warning('Veuillez signer avant de finaliser la livraison')
       return
     }
 
@@ -679,6 +739,13 @@ const confirmerCommencerLivraison = async () => {
 
     // Mettre à jour les quantités
     await mettreAJourQuantitesLivrees(selectedLivraison.value.id!, { quantites_livrees: quantitesForAPI })
+
+    // Commencer la livraison si elle est encore en attente
+    if (selectedLivraison.value.statut === 'en_attente') {
+      console.log('🔍 [LivraisonView] Commencement de la livraison...')
+      await commencerLivraisonAPI(selectedLivraison.value.id!)
+      console.log('✅ [LivraisonView] Livraison commencée')
+    }
 
     // Finaliser avec signature
     const requestData: any = {
@@ -736,11 +803,11 @@ const confirmerCommencerLivraison = async () => {
       message += '\n\nVous pouvez consulter tous les documents dans l\'onglet Documents.'
     }
 
-    alert(message)
+    await success(message)
 
-  } catch (error) {
-    console.error('❌ [LivraisonView] Erreur lors de la finalisation de la livraison:', error)
-    alert('Erreur lors de la finalisation de la livraison')
+  } catch (err) {
+    console.error('❌ [LivraisonView] Erreur lors de la finalisation de la livraison:', err)
+    await error('Erreur lors de la finalisation de la livraison')
   }
 }
 
@@ -781,19 +848,6 @@ const getStatusClass = (statut: string, livraison?: ExtendedLivraison) => {
   }
 }
 
-// Fonctions utilitaires
-const getStatutText = (statut: string) => {
-  const texts = {
-    'en_attente': 'En attente',
-    'confirmee': 'Confirmée',
-    'en_preparation': 'En préparation',
-    'en_cours': 'En cours',
-    'livre': 'Livré',
-    'annule': 'Annulé'
-  }
-  return texts[statut as keyof typeof texts] || statut
-}
-
 const formatDate = (date: string) => {
   return new Date(date).toLocaleDateString('fr-FR')
 }
@@ -812,6 +866,85 @@ const closeBLGenerator = () => {
 const onBLSaved = () => {
   closeBLGenerator()
   alert('Bon de Livraison généré et sauvegardé avec succès !')
+}
+
+// Fonction pour ouvrir la modal de modification des quantités
+const openQuantiteModal = (livraison: ExtendedLivraison) => {
+  selectedQuantiteLivraison.value = livraison
+  showQuantiteModal.value = true
+}
+
+// Fonction pour fermer la modal des quantités
+const closeQuantiteModal = () => {
+  showQuantiteModal.value = false
+  selectedQuantiteLivraison.value = null
+}
+
+// Fonction pour sauvegarder les quantités modifiées
+const saveQuantites = async () => {
+  if (!selectedQuantiteLivraison.value) return
+
+  try {
+    const updatedLivraison = await updateLivraison(selectedQuantiteLivraison.value.id!, selectedQuantiteLivraison.value)
+    
+    // Mettre à jour la liste des livraisons
+    if (updatedLivraison) {
+      const index = livraisons.value.findIndex(l => l.id === updatedLivraison.id)
+      if (index !== -1) {
+        livraisons.value[index] = updatedLivraison as ExtendedLivraison
+      }
+    }
+    
+    closeQuantiteModal()
+    await success('Quantités mises à jour avec succès !')
+  } catch (err) {
+    console.error('Erreur lors de la mise à jour des quantités:', err)
+    await error('Erreur lors de la mise à jour des quantités')
+  }
+}
+
+// Fonction pour ouvrir la modal de documentation des quantités
+const openDocumenterModal = (livraison: ExtendedLivraison) => {
+  selectedDocumenterLivraison.value = livraison
+  
+  // Initialiser les quantités avec les valeurs actuelles
+  quantitesLivraison.value = {}
+  livraison.produits.forEach(produit => {
+    quantitesLivraison.value[produit.nom] = produit.quantiteLivree || 0
+  })
+  
+  showDocumenterModal.value = true
+}
+
+// Fonction pour fermer la modal de documentation
+const closeDocumenterModal = () => {
+  showDocumenterModal.value = false
+  selectedDocumenterLivraison.value = null
+}
+
+// Fonction pour documenter les quantités livrées (sans finaliser)
+const documenterQuantites = async () => {
+  if (!selectedDocumenterLivraison.value) return
+
+  try {
+    // Préparer les quantités pour l'API
+    const quantitesForAPI = Object.entries(quantitesLivraison.value).map(([nom, quantite]) => ({
+      nom,
+      quantite
+    }))
+
+    // Mettre à jour les quantités livrées
+    await mettreAJourQuantitesLivrees(selectedDocumenterLivraison.value.id!, { quantites_livrees: quantitesForAPI })
+    
+    // Recharger les livraisons
+    await loadLivraisons()
+    
+    closeDocumenterModal()
+    await success('Quantités documentées avec succès !')
+  } catch (err) {
+    console.error('Erreur lors de la documentation des quantités:', err)
+    await error('Erreur lors de la documentation des quantités')
+  }
 }
 
 // Initialisation
@@ -836,6 +969,52 @@ onMounted(async () => {
   
   console.log('🔍 [LivraisonView] onMounted - Fin')
 })
+
+// Fonctions utilitaires pour les statuts
+const getStatutClass = (statut: string) => {
+  switch (statut) {
+    case 'en_attente':
+      return 'bg-blue-100 text-blue-800'
+    case 'en_cours':
+      return 'bg-yellow-100 text-yellow-800'
+    case 'livre':
+      return 'bg-green-100 text-green-800'
+    case 'annule':
+      return 'bg-red-100 text-red-800'
+    default:
+      return 'bg-gray-100 text-gray-800'
+  }
+}
+
+const getStatutText = (statut: string) => {
+  switch (statut) {
+    case 'en_attente':
+      return 'En attente'
+    case 'en_cours':
+      return 'En cours'
+    case 'livre':
+      return 'Livré'
+    case 'annule':
+      return 'Annulé'
+    default:
+      return statut
+  }
+}
+
+const getStatutIcon = (statut: string) => {
+  switch (statut) {
+    case 'en_attente':
+      return '⏳'
+    case 'en_cours':
+      return '🚚'
+    case 'livre':
+      return '✅'
+    case 'annule':
+      return '❌'
+    default:
+      return '❓'
+  }
+}
 </script>
 
 <template>
@@ -974,8 +1153,9 @@ onMounted(async () => {
                   <div class="livraison-main">
                     <div class="livraison-header-info">
                       <span class="status-badge"
-                            :class="getStatusClass(livraison.statut, livraison)">
-                        {{ getStatusText(livraison.statut, livraison) }}
+                            :class="getStatutClass(livraison.statut)">
+                        <span class="mr-1">{{ getStatutIcon(livraison.statut) }}</span>
+                        {{ getStatutText(livraison.statut) }}
                       </span>
                       <span class="livraison-number">#{{ livraison.numero_bl }}</span>
                       
@@ -1051,9 +1231,20 @@ onMounted(async () => {
                             </span>
                           </div>
                         </div>
+                        </div>
+                      </div>
+                      
+                      <!-- Affichage des quantités restantes -->
+                      <div v-if="getQuantitesRestantes(livraison).length > 0" class="quantites-restantes">
+                        <h6 class="restantes-title">Quantités restantes à livrer :</h6>
+                        <div class="restantes-list">
+                          <div v-for="item in getQuantitesRestantes(livraison)" :key="item.nom" class="restante-item">
+                            <span class="restante-nom">{{ item.nom }}</span>
+                            <span class="restante-quantite">{{ item.restante }} {{ item.unite }}</span>
+                          </div>
+                        </div>
                       </div>
                     </div>
-                  </div>
 
                   <div class="livraison-actions">
                     <!-- Actions selon le statut -->
@@ -1077,6 +1268,19 @@ onMounted(async () => {
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                       </svg>
                       Continuer livraison
+                    </button>
+
+                    <!-- Bouton pour documenter les quantités (disponible pour toutes les livraisons non finalisées) -->
+                    <button
+                      v-if="livraison.statut !== 'livre' && livraison.statut !== 'annule'"
+                      @click="openDocumenterModal(livraison)"
+                      class="btn bg-blue-500 hover:bg-blue-600 text-white"
+                      title="Documenter les quantités livrées"
+                    >
+                      <svg class="btn-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      </svg>
+                      Documenter quantités
                     </button>
 
                     <!-- Bouton clôturer si pas complètement livré -->
@@ -1181,8 +1385,9 @@ onMounted(async () => {
                   <div class="livraison-main">
                     <div class="livraison-header-info">
                       <span class="status-badge"
-                            :class="getStatusClass(livraison.statut, livraison)">
-                        {{ getStatusText(livraison.statut, livraison) }}
+                            :class="getStatutClass(livraison.statut)">
+                        <span class="mr-1">{{ getStatutIcon(livraison.statut) }}</span>
+                        {{ getStatutText(livraison.statut) }}
                       </span>
                       <span class="livraison-number">#{{ livraison.numero_bl }}</span>
                       <!-- Affichage spécial pour les livraisons clôturées -->
@@ -1454,6 +1659,103 @@ onMounted(async () => {
         @close="closeBordereauModal"
               />
             </div>
+
+    <!-- Modal de documentation des quantités -->
+    <div v-if="showDocumenterModal && selectedDocumenterLivraison" class="modal-overlay">
+      <div class="modal-container modal-large">
+        <div class="modal-header">
+          <div class="modal-header-content">
+            <h2 class="modal-title">Documenter les quantités - {{ selectedDocumenterLivraison.client }}</h2>
+            <button @click="closeDocumenterModal" class="modal-close">
+              <svg class="modal-close-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <div class="modal-body">
+          <div class="livraison-process">
+            <!-- Informations de la livraison -->
+            <div class="livraison-info-section">
+              <h3 class="section-title">Informations de livraison</h3>
+              <div class="info-grid">
+                <div class="info-item">
+                  <span class="info-label">N° BL :</span>
+                  <span class="info-value">{{ selectedDocumenterLivraison.numero_bl }}</span>
+                </div>
+                <div class="info-item">
+                  <span class="info-label">Client :</span>
+                  <span class="info-value">{{ selectedDocumenterLivraison.client }}</span>
+                </div>
+                <div class="info-item">
+                  <span class="info-label">Statut :</span>
+                  <span :class="['px-2 py-1 rounded-full text-sm font-medium', getStatutClass(selectedDocumenterLivraison.statut)]">
+                    <span class="mr-1">{{ getStatutIcon(selectedDocumenterLivraison.statut) }}</span>
+                    {{ getStatutText(selectedDocumenterLivraison.statut) }}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Saisie des quantités -->
+            <div class="quantites-section">
+              <h3 class="section-title">Quantités livrées</h3>
+              <div class="quantites-table">
+                <div class="table-header">
+                  <div class="col-produit">Produit</div>
+                  <div class="col-commandee">Commandée</div>
+                  <div class="col-livree">Livrée</div>
+                  <div class="col-difference">Différence</div>
+                </div>
+                <div v-for="produit in selectedDocumenterLivraison.produits" :key="produit.nom" class="table-row">
+                  <div class="col-produit">
+                    <span class="produit-nom">{{ produit.nom }}</span>
+                    <span class="produit-unite">{{ produit.unite }}</span>
+                  </div>
+                  <div class="col-commandee">
+                    {{ produit.quantiteCommandee || produit.quantite }}
+                  </div>
+                  <div class="col-livree">
+                    <input
+                      v-model.number="quantitesLivraison[produit.nom]"
+                      type="number"
+                      :min="0"
+                      :max="produit.quantiteCommandee || produit.quantite"
+                      step="0.01"
+                      class="quantite-input"
+                      :placeholder="(produit.quantiteLivree || 0).toString()"
+                    />
+                  </div>
+                  <div class="col-difference">
+                    <span :class="{
+                      'text-green-600': (quantitesLivraison[produit.nom] || produit.quantiteLivree || 0) >= (produit.quantiteCommandee || produit.quantite),
+                      'text-orange-600': (quantitesLivraison[produit.nom] || produit.quantiteLivree || 0) > 0 && (quantitesLivraison[produit.nom] || produit.quantiteLivree || 0) < (produit.quantiteCommandee || produit.quantite),
+                      'text-red-600': (quantitesLivraison[produit.nom] || produit.quantiteLivree || 0) === 0
+                    }">
+                      {{ ((produit.quantiteCommandee || produit.quantite) - (quantitesLivraison[produit.nom] || produit.quantiteLivree || 0)).toFixed(2) }}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Actions -->
+            <div class="modal-actions">
+              <button type="button" @click="closeDocumenterModal" class="btn btn-secondary">
+                Annuler
+              </button>
+              <button type="button" @click="documenterQuantites" class="btn btn-primary">
+                <svg class="btn-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                Documenter quantités
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
 
     <!-- Modal d'édition -->
     <div v-if="showModal" class="modal-overlay">
@@ -2626,6 +2928,49 @@ onMounted(async () => {
   text-align: center;
   font-weight: 600;
   font-size: 0.875rem;
+}
+
+/* Quantités restantes */
+.quantites-restantes {
+  margin-top: 1rem;
+  padding: 1rem;
+  background: #fef3c7;
+  border: 1px solid #f59e0b;
+  border-radius: 0.5rem;
+}
+
+.restantes-title {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #92400e;
+  margin-bottom: 0.5rem;
+}
+
+.restantes-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.restante-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.25rem 0;
+  font-size: 0.875rem;
+}
+
+.restante-nom {
+  font-weight: 500;
+  color: #92400e;
+}
+
+.restante-quantite {
+  font-weight: 600;
+  color: #b45309;
+  background: #fbbf24;
+  padding: 0.125rem 0.5rem;
+  border-radius: 0.25rem;
 }
 
 /* Section observations */

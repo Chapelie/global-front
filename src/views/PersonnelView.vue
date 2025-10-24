@@ -1,831 +1,1191 @@
-<template>
-  <div class="personnel-container">
-    <!-- Header moderne -->
-    <div class="personnel-header">
-      <div class="header-content">
-        <div class="header-main">
-          <div class="flex items-center">
-            <div class="h-12 w-12 rounded-2xl bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center mr-4 shadow-lg">
-              <UserGroupIcon class="h-6 w-6 text-white" />
-            </div>
-            <div>
-              <h1 class="page-title">Gestion du Personnel</h1>
-              <p class="page-subtitle">Création et gestion des utilisateurs</p>
-            </div>
-          </div>
-          <div class="flex items-center space-x-4">
-            <button
-              @click="openModal()"
-              class="action-button"
-            >
-              <PlusIcon class="h-5 w-5 mr-2" />
-              Nouvel utilisateur
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div class="main-content">
-      <!-- KPI Cards modernisés -->
-      <div class="stats-grid">
-        <div class="stat-card">
-          <div class="stat-content">
-            <div class="stat-icon-wrapper stat-blue">
-              <UserGroupIcon class="stat-icon" />
-            </div>
-            <div class="stat-details">
-              <dl>
-                <dt class="stat-label">Total utilisateurs</dt>
-                <dd class="stat-value">{{ users.length }}</dd>
-                <dd class="stat-unit">utilisateurs</dd>
-              </dl>
-            </div>
-          </div>
-        </div>
-
-        <div class="stat-card">
-          <div class="stat-content">
-            <div class="stat-icon-wrapper stat-green">
-              <CheckCircleIcon class="stat-icon" />
-            </div>
-            <div class="stat-details">
-              <dl>
-                <dt class="stat-label">Utilisateurs actifs</dt>
-                <dd class="stat-value">{{ activeUsers }}</dd>
-                <dd class="stat-unit">actifs</dd>
-              </dl>
-            </div>
-          </div>
-        </div>
-
-        <div class="stat-card">
-          <div class="stat-content">
-            <div class="stat-icon-wrapper stat-purple">
-              <ShieldCheckIcon class="stat-icon" />
-            </div>
-            <div class="stat-details">
-              <dl>
-                <dt class="stat-label">Administrateurs</dt>
-                <dd class="stat-value">{{ getRoleCount('admin') }}</dd>
-                <dd class="stat-unit">admins</dd>
-              </dl>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Liste des utilisateurs -->
-      <div class="users-grid">
-        <div
-          v-for="user in users"
-          :key="user.id"
-          class="user-card"
-        >
-          <div class="user-header">
-            <div class="user-avatar">
-              <div class="avatar-circle">
-                {{ (user.first_name || '?').charAt(0) }}{{ (user.last_name || '?').charAt(0) }}
-              </div>
-            </div>
-            <div class="user-info">
-              <h3 class="user-name">{{ user.first_name || 'Prénom' }} {{ user.last_name || 'Nom' }}</h3>
-              <p class="user-email">{{ user.email }}</p>
-            </div>
-          </div>
-
-          <div class="user-meta">
-            <span :class="`role-badge role-${user.role}`">
-              {{ getRoleLabel(user.role || 'operator') }}
-            </span>
-            <span :class="`status-badge status-${user.actif ? 'active' : 'inactive'}`">
-              {{ user.actif ? 'Actif' : 'Inactif' }}
-            </span>
-          </div>
-
-          <div v-if="user.phone" class="user-phone">
-            <PhoneIcon class="phone-icon" />
-            {{ user.phone }}
-          </div>
-
-          <div class="user-actions">
-            <button @click="openModal(user)" class="action-button action-secondary">
-              <PencilIcon class="h-4 w-4 mr-2" />
-              Modifier
-            </button>
-
-            <button @click="handleDeleteUser(String(user.id))" class="action-button action-danger">
-              <TrashIcon class="h-4 w-4 mr-2" />
-              Supprimer
-            </button>
-          </div>
-        </div>
-      </div>
-      </div>
-
-      <!-- Modal -->
-    <div v-if="showModal" class="modal-overlay" @click="closeModal">
-      <div class="modal-content" @click.stop>
-        <div class="modal-header">
-          <h2 class="modal-title">{{ editingUser ? 'Modifier l\'utilisateur' : 'Nouvel utilisateur' }}</h2>
-          <button @click="closeModal" class="modal-close">
-            <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-
-        <form @submit.prevent="saveUser" class="modal-form">
-          <div class="form-row">
-            <div class="form-group">
-              <label class="form-label">Prénom *</label>
-              <input
-                v-model="newUser.first_name"
-                type="text"
-                required
-                class="form-input"
-                placeholder="Prénom"
-              />
-            </div>
-
-            <div class="form-group">
-              <label class="form-label">Nom *</label>
-              <input
-                v-model="newUser.last_name"
-                type="text"
-                required
-                class="form-input"
-                placeholder="Nom"
-              />
-            </div>
-          </div>
-
-          <div class="form-group">
-            <label class="form-label">Email *</label>
-            <input
-              v-model="newUser.email"
-              type="email"
-              required
-              class="form-input"
-              placeholder="email@exemple.com"
-            />
-          </div>
-
-          <div v-if="!editingUser" class="form-group">
-            <label class="form-label">Mot de passe *</label>
-            <input
-              v-model="newUser.password"
-              type="password"
-              required
-              class="form-input"
-              placeholder="Mot de passe"
-            />
-          </div>
-
-          <div class="form-row">
-            <div class="form-group">
-              <label class="form-label">Rôle *</label>
-              <select v-model="newUser.role" required class="form-select">
-                <option value="operator">Opérateur</option>
-                <option value="manager">Manager</option>
-                <option value="admin">Administrateur</option>
-                <option value="secretaire">Secrétaire</option>
-                <option value="livreur">Livreur</option>
-              </select>
-            </div>
-
-            <div class="form-group">
-              <label class="form-label">Téléphone</label>
-              <input
-                v-model="newUser.phone"
-                type="tel"
-                class="form-input"
-                placeholder="+33 6 12 34 56 78"
-              />
-            </div>
-          </div>
-
-          <div class="form-group">
-            <label class="form-label">Statut</label>
-            <div class="checkbox-group">
-              <label class="checkbox-label">
-                <input
-                  v-model="newUser.actif"
-                  type="checkbox"
-                  class="checkbox-input"
-                />
-                <span class="checkbox-text">Utilisateur actif</span>
-              </label>
-            </div>
-          </div>
-
-          <div class="modal-actions">
-            <button type="button" @click="closeModal" class="btn btn-secondary">
-              Annuler
-            </button>
-            <button type="submit" class="btn btn-primary">
-              {{ editingUser ? 'Mettre à jour' : 'Créer' }}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-
-    <!-- Modal de connexion automatique -->
-    <AutoLoginModal
-      v-if="showAutoLoginModal && createdUser"
-      :show="showAutoLoginModal"
-      :user="createdUser"
-      @close="closeAutoLoginModal"
-      @success="onAutoLoginSuccess"
-    />
-  </div>
-</template>
-
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { useLaravelApi, type LaravelUser } from '@/services/laravelApiService'
-import AutoLoginModal from '@/components/AutoLoginModal.vue'
+import { useLaravelApi } from '../services/laravelApiService'
+import { useLaravelAuth } from '../services/laravelAuth'
 import {
-  UserGroupIcon,
   PlusIcon,
-  CheckCircleIcon,
-  ShieldCheckIcon,
-  PhoneIcon,
   PencilIcon,
-  TrashIcon
+  TrashIcon,
+  UserGroupIcon,
+  CheckCircleIcon,
+  ExclamationTriangleIcon,
+  ShieldCheckIcon,
+  CogIcon,
+  EyeIcon,
+  EyeSlashIcon,
+  KeyIcon,
+  UserIcon,
+  EnvelopeIcon,
+  PhoneIcon,
+  CalendarIcon,
+  ClockIcon
 } from '@heroicons/vue/24/outline'
 
-const { getUsers } = useLaravelApi()
+// Types
+interface User {
+  id?: number
+  name: string
+  email: string
+  phone?: string
+  role: string
+  password?: string
+  password_confirmation?: string
+  actif: boolean
+  created_at?: string
+  updated_at?: string
+}
+
+interface Role {
+  id: number
+  name: string
+  display_name: string
+  description: string
+  permissions: string[]
+  color: string
+}
+
+// Services
+const { getUsers, addUser, updateUser, deleteUser, getRoles, createRole, updateRole, deleteRole } = useLaravelApi()
+const { currentUser } = useLaravelAuth()
 
 // État réactif
-const users = ref<LaravelUser[]>([])
-const showModal = ref(false)
-const showAutoLoginModal = ref(false)
-const editingUser = ref<LaravelUser | null>(null)
-const createdUser = ref<LaravelUser | null>(null)
+const users = ref<User[]>([])
+const roles = ref<Role[]>([])
+const showUserModal = ref(false)
+const showRoleModal = ref(false)
+const editingUser = ref<User | null>(null)
+const editingRole = ref<Role | null>(null)
+const isEditingUser = ref(false)
+const isEditingRole = ref(false)
+const isLoading = ref(false)
+const showPassword = ref(false)
+const activeTab = ref<'users' | 'roles'>('users')
 
-const newUser = ref<Omit<LaravelUser, 'id' | 'created_at' | 'updated_at'> & { password: string }>({
-  email: '',
+// Nouvel utilisateur
+const newUser = ref<User>({
   name: '',
+  email: '',
   phone: '',
-  department: '',
-  position: '',
-  roles: [],
-  password: ''
+  role: 'operator',
+  password: '',
+  password_confirmation: '',
+  actif: true
 })
 
-// Computed
-const activeUsers = computed(() => 
-  users.value.filter(u => u.actif).length
-)
+// Nouveau rôle
+const newRole = ref<Role>({
+  name: '',
+  display_name: '',
+  description: '',
+  permissions: [],
+  color: 'blue'
+})
 
-// Méthodes
+// Rôles prédéfinis
+const predefinedRoles = [
+  {
+    id: 1,
+    name: 'super_admin',
+    display_name: 'Super Administrateur',
+    description: 'Accès complet à tous les modules et fonctionnalités',
+    permissions: ['all'],
+    color: 'red'
+  },
+  {
+    id: 2,
+    name: 'admin',
+    display_name: 'Administrateur',
+    description: 'Gestion des utilisateurs et accès à tous les modules',
+    permissions: ['users.manage', 'dashboard.view', 'production.manage', 'logistics.manage', 'inventory.manage'],
+    color: 'orange'
+  },
+  {
+    id: 3,
+    name: 'production_manager',
+    display_name: 'Responsable Production',
+    description: 'Gestion complète de la production',
+    permissions: ['production.manage', 'production.view', 'inventory.view', 'dashboard.production'],
+    color: 'blue'
+  },
+  {
+    id: 4,
+    name: 'production_operator',
+    display_name: 'Opérateur Production',
+    description: 'Opérations de production',
+    permissions: ['production.view', 'production.create', 'inventory.view'],
+    color: 'green'
+  },
+  {
+    id: 5,
+    name: 'logistics_manager',
+    display_name: 'Responsable Logistique',
+    description: 'Gestion des livraisons et logistique',
+    permissions: ['logistics.manage', 'logistics.view', 'customers.manage', 'dashboard.logistics'],
+    color: 'yellow'
+  },
+  {
+    id: 6,
+    name: 'logistics_operator',
+    display_name: 'Opérateur Logistique',
+    description: 'Opérations de livraison',
+    permissions: ['logistics.view', 'logistics.create', 'customers.view'],
+    color: 'indigo'
+  },
+  {
+    id: 7,
+    name: 'inventory_manager',
+    display_name: 'Responsable Inventaire',
+    description: 'Gestion des stocks et inventaire',
+    permissions: ['inventory.manage', 'inventory.view', 'products.manage'],
+    color: 'purple'
+  },
+  {
+    id: 8,
+    name: 'viewer',
+    display_name: 'Consultant',
+    description: 'Accès en lecture seule',
+    permissions: ['dashboard.view', 'production.view', 'logistics.view', 'inventory.view'],
+    color: 'gray'
+  }
+]
+
+// Computed properties
+const activeUsers = computed(() => users.value.filter(user => user.actif).length)
+
+const getRoleCount = (roleName: string) => {
+  return users.value.filter(user => user.role === roleName).length
+}
+
+const getRoleLabel = (role: string) => {
+  const roleData = predefinedRoles.find(r => r.name === role)
+  return roleData ? roleData.display_name : role
+}
+
+const getRoleColor = (role: string) => {
+  const roleData = predefinedRoles.find(r => r.name === role)
+  return roleData ? roleData.color : 'gray'
+}
+
+// Charger les données
+onMounted(async () => {
+  await loadUsers()
+  await loadRoles()
+})
+
 const loadUsers = async () => {
   try {
-    console.log('🔍 [PersonnelView] Chargement des utilisateurs...')
+    isLoading.value = true
     users.value = await getUsers()
-    console.log('✅ [PersonnelView] Utilisateurs chargés:', users.value.length)
   } catch (error) {
-    console.error('❌ [PersonnelView] Erreur lors du chargement des utilisateurs:', error)
+    console.error('Erreur lors du chargement des utilisateurs:', error)
+    alert('Erreur lors du chargement des utilisateurs')
+  } finally {
+    isLoading.value = false
   }
 }
 
-const openModal = (user?: LaravelUser) => {
-  if (user) {
-    editingUser.value = user
-    newUser.value = {
-      email: user.email,
-      name: user.name,
-      phone: user.phone || '',
-      department: user.department || '',
-      position: user.position || '',
-      roles: user.roles || [],
-      password: ''
-    }
-  } else {
-    editingUser.value = null
-    newUser.value = {
-      email: '',
-      name: '',
-      phone: '',
-      department: '',
-      position: '',
-      roles: [],
-      password: ''
-    }
-  }
-  showModal.value = true
-}
-
-const closeModal = () => {
-  showModal.value = false
-  editingUser.value = null
-}
-
-const saveUser = async () => {
+const loadRoles = async () => {
   try {
-    console.log('💾 [PersonnelView] Sauvegarde de l\'utilisateur...')
-    
-    if (editingUser.value) {
-      await updateUser(editingUser.value.id!, newUser.value)
-      console.log('✅ [PersonnelView] Utilisateur mis à jour')
-      await loadUsers()
-      closeModal()
-      alert('Utilisateur mis à jour avec succès !')
-    } else {
-      const createdUserData = await createUser(newUser.value)
-      console.log('✅ [PersonnelView] Utilisateur créé')
-      createdUser.value = createdUserData
-      await loadUsers()
-      closeModal()
-      
-      // Proposer la connexion automatique pour les nouveaux utilisateurs
-      showAutoLoginModal.value = true
-    }
+    roles.value = await getRoles()
   } catch (error) {
-    console.error('❌ [PersonnelView] Erreur lors de la sauvegarde:', error)
+    console.error('Erreur lors du chargement des rôles:', error)
+    // Utiliser les rôles prédéfinis si l'API échoue
+    roles.value = predefinedRoles
+  }
+}
+
+// Gestion des modals utilisateurs
+const openUserModal = (user?: User) => {
+  if (user) {
+    editingUser.value = { ...user }
+    isEditingUser.value = true
+  } else {
+    editingUser.value = { ...newUser.value }
+    isEditingUser.value = false
+  }
+  showUserModal.value = true
+  showPassword.value = false
+}
+
+const closeUserModal = () => {
+  showUserModal.value = false
+  editingUser.value = null
+  isEditingUser.value = false
+}
+
+// Gestion des modals rôles
+const openRoleModal = (role?: Role) => {
+  if (role) {
+    editingRole.value = { ...role }
+    isEditingRole.value = true
+  } else {
+    editingRole.value = { ...newRole.value }
+    isEditingRole.value = false
+  }
+  showRoleModal.value = true
+}
+
+const closeRoleModal = () => {
+  showRoleModal.value = false
+  editingRole.value = null
+  isEditingRole.value = false
+}
+
+// CRUD Utilisateurs
+const saveUser = async () => {
+  if (!editingUser.value) return
+
+  try {
+    if (isEditingUser.value) {
+      await updateUser(editingUser.value.id!, editingUser.value)
+    } else {
+      await addUser(editingUser.value)
+    }
+    await loadUsers()
+    closeUserModal()
+  } catch (error) {
+    console.error('Erreur lors de la sauvegarde de l\'utilisateur:', error)
     alert('Erreur lors de la sauvegarde de l\'utilisateur')
   }
 }
 
-const handleDeleteUser = async (id: string) => {
-  if (confirm('Êtes-vous sûr de vouloir supprimer cet utilisateur ?')) {
-    try {
-      console.log('🗑️ [PersonnelView] Suppression de l\'utilisateur:', id)
-      await deleteUser(Number(id))
-      await loadUsers()
-      console.log('✅ [PersonnelView] Utilisateur supprimé')
-    } catch (error) {
-      console.error('❌ [PersonnelView] Erreur lors de la suppression:', error)
-      alert('Erreur lors de la suppression de l\'utilisateur')
+const deleteUserAction = async (user: User) => {
+  if (!confirm(`Êtes-vous sûr de vouloir supprimer l'utilisateur ${user.name} ?`)) return
+
+  try {
+    await deleteUser(user.id!)
+    await loadUsers()
+  } catch (error) {
+    console.error('Erreur lors de la suppression de l\'utilisateur:', error)
+    alert('Erreur lors de la suppression de l\'utilisateur')
+  }
+}
+
+// CRUD Rôles
+const saveRole = async () => {
+  if (!editingRole.value) return
+
+  try {
+    if (isEditingRole.value) {
+      await updateRole(editingRole.value.id!, editingRole.value)
+    } else {
+      await createRole(editingRole.value)
     }
+    await loadRoles()
+    closeRoleModal()
+  } catch (error) {
+    console.error('Erreur lors de la sauvegarde du rôle:', error)
+    alert('Erreur lors de la sauvegarde du rôle')
   }
 }
 
-const getRoleLabel = (role: string) => {
-  const labels: Record<string, string> = {
-    'superadmin': 'Super Admin',
-    'admin': 'Administrateur',
-    'manager': 'Manager',
-    'operator': 'Opérateur',
-    'secretaire': 'Secrétaire',
-    'livreur': 'Livreur'
+const deleteRoleAction = async (role: Role) => {
+  if (!confirm(`Êtes-vous sûr de vouloir supprimer le rôle ${role.display_name} ?`)) return
+
+  try {
+    await deleteRole(role.id!)
+    await loadRoles()
+  } catch (error) {
+    console.error('Erreur lors de la suppression du rôle:', error)
+    alert('Erreur lors de la suppression du rôle')
   }
-  return labels[role] || role
 }
 
-const getRoleCount = (role: string) => {
-  return users.value.filter(u => u.role === role).length
+// Fonctions utilitaires
+const formatDate = (dateString: string) => {
+  return new Date(dateString).toLocaleDateString('fr-FR')
 }
 
-const closeAutoLoginModal = () => {
-  showAutoLoginModal.value = false
-  createdUser.value = null
+const togglePasswordVisibility = () => {
+  showPassword.value = !showPassword.value
 }
 
-const onAutoLoginSuccess = () => {
-  console.log('✅ [PersonnelView] Connexion automatique réussie')
-  closeAutoLoginModal()
-  alert('Connexion automatique réussie !')
+const generatePassword = () => {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*'
+  let password = ''
+  for (let i = 0; i < 12; i++) {
+    password += chars.charAt(Math.floor(Math.random() * chars.length))
+  }
+  if (editingUser.value) {
+    editingUser.value.password = password
+    editingUser.value.password_confirmation = password
+  }
 }
 
-// Lifecycle
-onMounted(() => {
-  loadUsers()
-})
+const copyToClipboard = (text: string) => {
+  navigator.clipboard.writeText(text)
+  alert('Copié dans le presse-papiers !')
+}
 </script>
 
+<template>
+  <div class="personnel-container min-h-screen bg-gray-50">
+    <!-- Header -->
+    <div class="header-content bg-white border-b border-gray-200 shadow-sm">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between">
+          <div class="flex items-center mb-4 sm:mb-0">
+            <div class="h-12 w-12 rounded-xl bg-gradient-to-r from-orange-500 to-orange-600 flex items-center justify-center shadow-lg mr-4">
+              <UserGroupIcon class="h-6 w-6 text-white" />
+            </div>
+            <div>
+              <h1 class="page-title text-2xl font-bold text-gray-900">Gestion du Personnel</h1>
+              <p class="text-sm text-gray-600">Utilisateurs et rôles du système</p>
+            </div>
+          </div>
+          
+          <div class="flex space-x-3">
+            <button
+              @click="activeTab = 'users'"
+              :class="[
+                'px-4 py-2 rounded-lg font-medium transition-all duration-200',
+                activeTab === 'users'
+                  ? 'bg-gradient-to-r from-orange-500 to-orange-600 text-white shadow-lg'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              ]"
+            >
+              Utilisateurs
+            </button>
+            <button
+              @click="activeTab = 'roles'"
+              :class="[
+                'px-4 py-2 rounded-lg font-medium transition-all duration-200',
+                activeTab === 'roles'
+                  ? 'bg-gradient-to-r from-orange-500 to-orange-600 text-white shadow-lg'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              ]"
+            >
+              Rôles
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      <!-- Statistiques -->
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+        <div class="stat-card bg-white rounded-xl shadow-lg overflow-hidden">
+          <div class="stat-content p-6">
+            <div class="flex items-center">
+              <div class="h-12 w-12 rounded-xl bg-gradient-to-r from-blue-500 to-blue-600 flex items-center justify-center shadow-lg">
+                <UserGroupIcon class="h-6 w-6 text-white" />
+            </div>
+              <div class="ml-4">
+                <p class="text-sm font-medium text-gray-600">Total utilisateurs</p>
+                <p class="stat-value text-2xl font-bold text-gray-900">{{ users.length }}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="stat-card bg-white rounded-xl shadow-lg overflow-hidden">
+          <div class="stat-content p-6">
+            <div class="flex items-center">
+              <div class="h-12 w-12 rounded-xl bg-gradient-to-r from-green-500 to-green-600 flex items-center justify-center shadow-lg">
+                <CheckCircleIcon class="h-6 w-6 text-white" />
+            </div>
+              <div class="ml-4">
+                <p class="text-sm font-medium text-gray-600">Utilisateurs actifs</p>
+                <p class="stat-value text-2xl font-bold text-gray-900">{{ activeUsers }}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="stat-card bg-white rounded-xl shadow-lg overflow-hidden">
+          <div class="stat-content p-6">
+            <div class="flex items-center">
+              <div class="h-12 w-12 rounded-xl bg-gradient-to-r from-orange-500 to-orange-600 flex items-center justify-center shadow-lg">
+                <ShieldCheckIcon class="h-6 w-6 text-white" />
+            </div>
+              <div class="ml-4">
+                <p class="text-sm font-medium text-gray-600">Administrateurs</p>
+                <p class="stat-value text-2xl font-bold text-gray-900">{{ getRoleCount('admin') + getRoleCount('super_admin') }}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Onglets de contenu -->
+      <div class="bg-white rounded-xl shadow-lg overflow-hidden">
+        <!-- Onglets -->
+        <div class="border-b border-gray-200">
+          <nav class="flex">
+            <button
+              @click="activeTab = 'users'"
+              :class="[
+                'flex-1 px-6 py-4 text-sm font-medium text-center transition-all duration-200',
+                activeTab === 'users'
+                  ? 'bg-gradient-to-r from-orange-500 to-orange-600 text-white border-b-2 border-orange-500'
+                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+              ]"
+            >
+              <UserGroupIcon class="h-5 w-5 mx-auto mb-2" />
+              Utilisateurs
+            </button>
+            <button
+              @click="activeTab = 'roles'"
+              :class="[
+                'flex-1 px-6 py-4 text-sm font-medium text-center transition-all duration-200',
+                activeTab === 'roles'
+                  ? 'bg-gradient-to-r from-orange-500 to-orange-600 text-white border-b-2 border-orange-500'
+                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+              ]"
+            >
+              <CogIcon class="h-5 w-5 mx-auto mb-2" />
+              Rôles
+            </button>
+          </nav>
+              </div>
+
+        <!-- Contenu Utilisateurs -->
+        <div v-if="activeTab === 'users'" class="p-6">
+          <div class="flex justify-between items-center mb-6">
+            <h2 class="text-lg font-semibold text-gray-900">Liste des utilisateurs</h2>
+            <button
+              @click="openUserModal()"
+              class="action-button inline-flex items-center px-4 py-2 bg-gradient-to-r from-orange-500 to-orange-600 text-white font-medium rounded-xl shadow-lg hover:from-orange-600 hover:to-orange-700 transition-all duration-200 transform hover:scale-105"
+            >
+              <PlusIcon class="h-5 w-5 mr-2" />
+              Nouvel utilisateur
+            </button>
+            </div>
+
+          <!-- Tableau des utilisateurs -->
+          <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200">
+              <thead class="bg-gray-50">
+                <tr>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Utilisateur</th>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email</th>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Téléphone</th>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Rôle</th>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Statut</th>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Créé le</th>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                </tr>
+              </thead>
+              <tbody class="bg-white divide-y divide-gray-200">
+                <tr v-for="user in users" :key="user.id" class="hover:bg-gray-50">
+                  <td class="px-6 py-4 whitespace-nowrap">
+                    <div class="flex items-center">
+                      <div class="h-10 w-10 rounded-full bg-gradient-to-r from-orange-500 to-orange-600 flex items-center justify-center shadow-lg mr-4">
+                        <span class="text-sm font-bold text-white">
+                          {{ (user.name || '?').charAt(0) }}
+                        </span>
+            </div>
+                      <div>
+                        <div class="text-sm font-medium text-gray-900">{{ user.name || 'Nom non défini' }}</div>
+          </div>
+                    </div>
+                  </td>
+                  <td class="px-6 py-4 whitespace-nowrap">
+                    <div class="text-sm text-gray-900">{{ user.email }}</div>
+                  </td>
+                  <td class="px-6 py-4 whitespace-nowrap">
+                    <div class="text-sm text-gray-900">{{ user.phone || 'N/A' }}</div>
+                  </td>
+                  <td class="px-6 py-4 whitespace-nowrap">
+                    <span
+                      :class="[
+                        'inline-flex items-center px-2 py-1 rounded-full text-xs font-medium',
+                        `bg-${getRoleColor(user.role)}-100 text-${getRoleColor(user.role)}-800`
+                      ]"
+                    >
+                      {{ getRoleLabel(user.role) }}
+            </span>
+                  </td>
+                  <td class="px-6 py-4 whitespace-nowrap">
+                    <span
+                      :class="[
+                        'inline-flex items-center px-2 py-1 rounded-full text-xs font-medium',
+                        user.actif ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                      ]"
+                    >
+                      <component
+                        :is="user.actif ? CheckCircleIcon : ExclamationTriangleIcon"
+                        class="h-3 w-3 mr-1"
+                      />
+              {{ user.actif ? 'Actif' : 'Inactif' }}
+            </span>
+                  </td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                    {{ user.created_at ? formatDate(user.created_at) : 'N/A' }}
+                  </td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                    <div class="flex space-x-2">
+                      <button
+                        @click="openUserModal(user)"
+                        class="text-orange-600 hover:text-orange-900 transition-colors"
+                      >
+                        <PencilIcon class="h-4 w-4" />
+                      </button>
+                      <button
+                        @click="deleteUserAction(user)"
+                        class="text-red-600 hover:text-red-900 transition-colors"
+                      >
+                        <TrashIcon class="h-4 w-4" />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Message si aucun utilisateur -->
+          <div v-if="users.length === 0" class="text-center py-12">
+            <UserGroupIcon class="h-12 w-12 text-gray-400 mx-auto mb-4" />
+            <h3 class="text-lg font-medium text-gray-900 mb-2">Aucun utilisateur trouvé</h3>
+            <p class="text-gray-600">Commencez par créer votre premier utilisateur.</p>
+          </div>
+          </div>
+
+        <!-- Contenu Rôles -->
+        <div v-if="activeTab === 'roles'" class="p-6">
+          <div class="flex justify-between items-center mb-6">
+            <h2 class="text-lg font-semibold text-gray-900">Liste des rôles</h2>
+            <button
+              @click="openRoleModal()"
+              class="action-button inline-flex items-center px-4 py-2 bg-gradient-to-r from-orange-500 to-orange-600 text-white font-medium rounded-xl shadow-lg hover:from-orange-600 hover:to-orange-700 transition-all duration-200 transform hover:scale-105"
+            >
+              <PlusIcon class="h-5 w-5 mr-2" />
+              Nouveau rôle
+            </button>
+          </div>
+
+          <!-- Tableau des rôles -->
+          <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200">
+              <thead class="bg-gray-50">
+                <tr>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Rôle</th>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Description</th>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Permissions</th>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Utilisateurs</th>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                </tr>
+              </thead>
+              <tbody class="bg-white divide-y divide-gray-200">
+                <tr v-for="role in roles" :key="role.id" class="hover:bg-gray-50">
+                  <td class="px-6 py-4 whitespace-nowrap">
+                    <div class="flex items-center">
+                      <div :class="[
+                        'h-10 w-10 rounded-xl flex items-center justify-center shadow-lg mr-4',
+                        `bg-gradient-to-r from-${role.color}-500 to-${role.color}-600`
+                      ]">
+                        <CogIcon class="h-5 w-5 text-white" />
+                      </div>
+                      <div>
+                        <div class="text-sm font-medium text-gray-900">{{ role.display_name }}</div>
+                        <div class="text-sm text-gray-500">{{ role.name }}</div>
+                      </div>
+                    </div>
+                  </td>
+                  <td class="px-6 py-4">
+                    <div class="text-sm text-gray-900">{{ role.description }}</div>
+                  </td>
+                  <td class="px-6 py-4">
+                    <div class="flex flex-wrap gap-1">
+                      <span
+                        v-for="permission in role.permissions.slice(0, 3)"
+                        :key="permission"
+                        class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800"
+                      >
+                        {{ permission }}
+                      </span>
+                      <span
+                        v-if="role.permissions.length > 3"
+                        class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800"
+                      >
+                        +{{ role.permissions.length - 3 }} autres
+                      </span>
+                    </div>
+                  </td>
+                  <td class="px-6 py-4 whitespace-nowrap">
+                    <div class="text-sm font-medium text-gray-900">{{ getRoleCount(role.name) }}</div>
+                  </td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                    <div class="flex space-x-2">
+                      <button
+                        @click="openRoleModal(role)"
+                        class="text-orange-600 hover:text-orange-900 transition-colors"
+                      >
+                        <PencilIcon class="h-4 w-4" />
+                      </button>
+                      <button
+                        @click="deleteRoleAction(role)"
+                        class="text-red-600 hover:text-red-900 transition-colors"
+                      >
+                        <TrashIcon class="h-4 w-4" />
+            </button>
+          </div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Message si aucun rôle -->
+          <div v-if="roles.length === 0" class="text-center py-12">
+            <CogIcon class="h-12 w-12 text-gray-400 mx-auto mb-4" />
+            <h3 class="text-lg font-medium text-gray-900 mb-2">Aucun rôle trouvé</h3>
+            <p class="text-gray-600">Commencez par créer votre premier rôle.</p>
+          </div>
+        </div>
+      </div>
+      </div>
+
+    <!-- Modal Utilisateur -->
+    <div
+      v-if="showUserModal"
+      class="fixed inset-0 z-50 overflow-y-auto mobile-modal-container"
+      @click.self="closeUserModal"
+    >
+      <div class="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
+        <div class="fixed inset-0 transition-opacity bg-gray-500 bg-opacity-75" @click="closeUserModal"></div>
+
+        <div class="modal-container inline-block align-bottom bg-white rounded-xl text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
+          <!-- Header -->
+          <div class="modal-header-content bg-gradient-to-r from-orange-500 to-orange-600 px-6 py-4">
+            <div class="flex items-center justify-between">
+              <div>
+                <h3 class="modal-title text-lg font-semibold text-white">
+                  {{ isEditingUser ? 'Modifier l\'utilisateur' : 'Nouvel utilisateur' }}
+                </h3>
+                <p class="modal-subtitle text-sm text-orange-100">
+                  {{ isEditingUser ? 'Modifiez les informations' : 'Renseignez les informations' }}
+                </p>
+              </div>
+              <button
+                @click="closeUserModal"
+                class="text-orange-200 hover:text-white transition-colors"
+              >
+                <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+            </div>
+
+          <!-- Contenu -->
+          <div class="modal-body-content px-6 py-6 max-h-96 overflow-y-auto">
+            <form @submit.prevent="saveUser" class="space-y-4">
+              <!-- Nom -->
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">Nom complet *</label>
+              <input
+                  v-model="editingUser.name"
+                type="text"
+                required
+                  class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+              />
+          </div>
+
+              <!-- Email -->
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">Email *</label>
+            <input
+                  v-model="editingUser.email"
+              type="email"
+              required
+                  class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+            />
+          </div>
+
+              <!-- Téléphone -->
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">Téléphone</label>
+            <input
+                  v-model="editingUser.phone"
+                  type="tel"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+            />
+          </div>
+
+              <!-- Rôle -->
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">Rôle *</label>
+                <select
+                  v-model="editingUser.role"
+                  required
+                  class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                >
+                  <option
+                    v-for="role in predefinedRoles"
+                    :key="role.name"
+                    :value="role.name"
+                  >
+                    {{ role.display_name }}
+                  </option>
+              </select>
+            </div>
+
+              <!-- Mot de passe (seulement pour nouveau utilisateur) -->
+              <div v-if="!isEditingUser">
+                <label class="block text-sm font-medium text-gray-700 mb-2">Mot de passe *</label>
+                <div class="relative">
+              <input
+                    v-model="editingUser.password"
+                    :type="showPassword ? 'text' : 'password'"
+                    required
+                    class="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                  />
+                  <button
+                    type="button"
+                    @click="togglePasswordVisibility"
+                    class="absolute inset-y-0 right-0 pr-3 flex items-center"
+                  >
+                    <component
+                      :is="showPassword ? EyeSlashIcon : EyeIcon"
+                      class="h-5 w-5 text-gray-400"
+                    />
+                  </button>
+            </div>
+                <button
+                  type="button"
+                  @click="generatePassword"
+                  class="mt-2 text-sm text-orange-600 hover:text-orange-800 flex items-center"
+                >
+                  <KeyIcon class="h-4 w-4 mr-1" />
+                  Générer un mot de passe
+                </button>
+          </div>
+
+              <!-- Confirmation mot de passe -->
+              <div v-if="!isEditingUser">
+                <label class="block text-sm font-medium text-gray-700 mb-2">Confirmer le mot de passe *</label>
+                <input
+                  v-model="editingUser.password_confirmation"
+                  type="password"
+                  required
+                  class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                />
+              </div>
+
+              <!-- Statut -->
+              <div class="flex items-center">
+                <input
+                  v-model="editingUser.actif"
+                  type="checkbox"
+                  class="h-4 w-4 text-orange-600 focus:ring-orange-500 border-gray-300 rounded"
+                />
+                <label class="ml-2 block text-sm text-gray-900">
+                  Utilisateur actif
+              </label>
+            </div>
+            </form>
+          </div>
+
+          <!-- Footer -->
+          <div class="modal-footer-content bg-gray-50 px-6 py-4 flex justify-end space-x-3">
+            <button
+              @click="closeUserModal"
+              class="btn-cancel px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500"
+            >
+              Annuler
+            </button>
+            <button
+              @click="saveUser"
+              class="btn-submit px-4 py-2 text-sm font-medium text-white bg-gradient-to-r from-orange-500 to-orange-600 rounded-lg hover:from-orange-600 hover:to-orange-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500"
+            >
+              {{ isEditingUser ? 'Modifier' : 'Créer' }}
+            </button>
+          </div>
+      </div>
+    </div>
+  </div>
+
+    <!-- Modal Rôle -->
+    <div
+      v-if="showRoleModal"
+      class="fixed inset-0 z-50 overflow-y-auto mobile-modal-container"
+      @click.self="closeRoleModal"
+    >
+      <div class="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
+        <div class="fixed inset-0 transition-opacity bg-gray-500 bg-opacity-75" @click="closeRoleModal"></div>
+
+        <div class="modal-container inline-block align-bottom bg-white rounded-xl text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
+          <!-- Header -->
+          <div class="modal-header-content bg-gradient-to-r from-orange-500 to-orange-600 px-6 py-4">
+            <div class="flex items-center justify-between">
+              <div>
+                <h3 class="modal-title text-lg font-semibold text-white">
+                  {{ isEditingRole ? 'Modifier le rôle' : 'Nouveau rôle' }}
+                </h3>
+                <p class="modal-subtitle text-sm text-orange-100">
+                  {{ isEditingRole ? 'Modifiez les informations' : 'Renseignez les informations' }}
+                </p>
+              </div>
+              <button
+                @click="closeRoleModal"
+                class="text-orange-200 hover:text-white transition-colors"
+              >
+                <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+          </div>
+
+          <!-- Contenu -->
+          <div class="modal-body-content px-6 py-6 max-h-96 overflow-y-auto">
+            <form @submit.prevent="saveRole" class="space-y-4">
+              <!-- Nom du rôle -->
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">Nom du rôle *</label>
+                <input
+                  v-model="editingRole.name"
+                  type="text"
+                  required
+                  placeholder="Ex: custom_role"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                />
+              </div>
+
+              <!-- Nom d'affichage -->
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">Nom d'affichage *</label>
+                <input
+                  v-model="editingRole.display_name"
+                  type="text"
+                  required
+                  placeholder="Ex: Rôle Personnalisé"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                />
+              </div>
+
+              <!-- Description -->
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">Description</label>
+                <textarea
+                  v-model="editingRole.description"
+                  rows="3"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                ></textarea>
+              </div>
+
+              <!-- Couleur -->
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">Couleur</label>
+                <select
+                  v-model="editingRole.color"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                >
+                  <option value="blue">Bleu</option>
+                  <option value="green">Vert</option>
+                  <option value="red">Rouge</option>
+                  <option value="yellow">Jaune</option>
+                  <option value="orange">Orange</option>
+                  <option value="purple">Violet</option>
+                  <option value="indigo">Indigo</option>
+                  <option value="gray">Gris</option>
+                </select>
+              </div>
+
+              <!-- Permissions -->
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">Permissions</label>
+                <div class="space-y-2 max-h-32 overflow-y-auto border border-gray-200 rounded-lg p-3">
+                  <label
+                    v-for="permission in [
+                      'all', 'users.manage', 'dashboard.view', 'production.manage', 'production.view',
+                      'logistics.manage', 'logistics.view', 'inventory.manage', 'inventory.view',
+                      'customers.manage', 'customers.view', 'products.manage', 'products.view'
+                    ]"
+                    :key="permission"
+                    class="flex items-center"
+                  >
+                    <input
+                      v-model="editingRole.permissions"
+                      :value="permission"
+                      type="checkbox"
+                      class="h-4 w-4 text-orange-600 focus:ring-orange-500 border-gray-300 rounded"
+                    />
+                    <span class="ml-2 text-sm text-gray-900">{{ permission }}</span>
+                  </label>
+                </div>
+              </div>
+            </form>
+          </div>
+
+          <!-- Footer -->
+          <div class="modal-footer-content bg-gray-50 px-6 py-4 flex justify-end space-x-3">
+            <button
+              @click="closeRoleModal"
+              class="btn-cancel px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500"
+            >
+              Annuler
+            </button>
+            <button
+              @click="saveRole"
+              class="btn-submit px-4 py-2 text-sm font-medium text-white bg-gradient-to-r from-orange-500 to-orange-600 rounded-lg hover:from-orange-600 hover:to-orange-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500"
+            >
+              {{ isEditingRole ? 'Modifier' : 'Créer' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
 <style scoped>
-/* Container principal */
+/* Styles de base */
 .personnel-container {
   min-height: 100vh;
-  background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
-  padding: 2rem;
-}
-
-/* Header moderne */
-.personnel-header {
-  margin-bottom: 2rem;
-}
-
-.header-content {
-  background: white;
-  border-radius: 1rem;
-  padding: 2rem;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-}
-
-.header-main {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
 }
 
 .page-title {
-  font-size: 2rem;
+  font-size: 1.875rem;
+  line-height: 2.25rem;
   font-weight: 700;
-  color: #1e293b;
-  margin: 0;
-}
-
-.page-subtitle {
-  color: #64748b;
-  font-size: 1rem;
-  margin: 0.5rem 0 0 0;
-}
-
-/* Contenu principal */
-.main-content {
-  max-width: 1400px;
-  margin: 0 auto;
-}
-
-/* Grille des statistiques */
-.stats-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 1.5rem;
-  margin-bottom: 2rem;
-}
-
-.stat-card {
-  background: white;
-  border-radius: 1rem;
-  padding: 1.5rem;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-  transition: transform 0.2s, box-shadow 0.2s;
-}
-
-.stat-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 10px 25px -3px rgba(0, 0, 0, 0.1);
-}
-
-.stat-content {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-}
-
-.stat-icon-wrapper {
-  width: 3rem;
-  height: 3rem;
-  border-radius: 0.75rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.stat-blue {
-  background: linear-gradient(135deg, #3b82f6, #1d4ed8);
-}
-
-.stat-green {
-  background: linear-gradient(135deg, #10b981, #059669);
-}
-
-.stat-purple {
-  background: linear-gradient(135deg, #8b5cf6, #7c3aed);
-}
-
-.stat-icon {
-  width: 1.5rem;
-  height: 1.5rem;
-  color: white;
-}
-
-.stat-details {
-  flex: 1;
-}
-
-.stat-label {
-  font-size: 0.875rem;
-  color: #64748b;
-  margin: 0;
-}
-
-.stat-value {
-  font-size: 2rem;
-  font-weight: 700;
-  color: #1e293b;
-  margin: 0.25rem 0 0 0;
-}
-
-.stat-unit {
-  font-size: 0.75rem;
-  color: #94a3b8;
-  margin: 0;
-}
-
-/* Grille des utilisateurs */
-.users-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
-  gap: 1.5rem;
-}
-
-.user-card {
-  background: white;
-  border-radius: 1rem;
-  padding: 1.5rem;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-  transition: transform 0.2s, box-shadow 0.2s;
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-}
-
-.user-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 10px 25px -3px rgba(0, 0, 0, 0.1);
-}
-
-.user-header {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-}
-
-.user-avatar {
-  flex-shrink: 0;
-}
-
-.avatar-circle {
-  width: 3rem;
-  height: 3rem;
-  border-radius: 50%;
-  background: linear-gradient(135deg, #8b5cf6, #7c3aed);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: white;
-  font-weight: 700;
-  font-size: 1rem;
-}
-
-.user-info {
-  flex: 1;
-}
-
-.user-name {
-  font-size: 1.125rem;
-  font-weight: 600;
-  color: #1e293b;
-  margin: 0 0 0.25rem 0;
-}
-
-.user-email {
-  color: #64748b;
-  font-size: 0.875rem;
-  margin: 0;
-}
-
-.user-meta {
-  display: flex;
-  gap: 0.5rem;
-  flex-wrap: wrap;
-}
-
-.role-badge {
-  padding: 0.25rem 0.75rem;
-  border-radius: 9999px;
-  font-size: 0.75rem;
-  font-weight: 500;
-}
-
-.role-superadmin {
-  background: #fef3c7;
-  color: #92400e;
-}
-
-.role-admin {
-  background: #dbeafe;
-  color: #1e40af;
-}
-
-.role-manager {
-  background: #d1fae5;
-  color: #065f46;
-}
-
-.role-operator {
-  background: #e0e7ff;
-  color: #3730a3;
-}
-
-.role-secretaire {
-  background: #fce7f3;
-  color: #be185d;
-}
-
-.role-livreur {
-  background: #fef3c7;
-  color: #92400e;
-}
-
-.status-badge {
-  padding: 0.25rem 0.75rem;
-  border-radius: 9999px;
-  font-size: 0.75rem;
-  font-weight: 500;
-}
-
-.status-active {
-  background: #d1fae5;
-  color: #065f46;
-}
-
-.status-inactive {
-  background: #fee2e2;
-  color: #991b1b;
-}
-
-.user-phone {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  color: #64748b;
-  font-size: 0.875rem;
-}
-
-.phone-icon {
-  width: 1rem;
-  height: 1rem;
-}
-
-.user-actions {
-  display: flex;
-  gap: 0.5rem;
-  flex-wrap: wrap;
+  color: #111827;
 }
 
 .action-button {
   display: inline-flex;
   align-items: center;
-  gap: 0.5rem;
   padding: 0.5rem 1rem;
-  border-radius: 0.5rem;
-  font-weight: 500;
-  text-decoration: none;
-  border: none;
-  cursor: pointer;
-  transition: all 0.2s;
-  font-size: 0.875rem;
-}
-
-.action-button {
-  background: #3b82f6;
+  background: linear-gradient(to right, #f97316, #ea580c);
   color: white;
+  font-weight: 500;
+  border-radius: 0.75rem;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+  transition: all 0.2s;
+  transform: scale(1);
 }
 
 .action-button:hover {
-  background: #2563eb;
-  transform: translateY(-1px);
+  background: linear-gradient(to right, #ea580c, #c2410c);
+  transform: scale(1.05);
 }
 
-.action-secondary {
-  background: #64748b;
-  color: white;
-}
-
-.action-secondary:hover {
-  background: #475569;
-  transform: translateY(-1px);
-}
-
-.action-danger {
-  background: #ef4444;
-  color: white;
-}
-
-.action-danger:hover {
-  background: #dc2626;
-  transform: translateY(-1px);
-}
-
-/* Modal styles */
-.modal-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-}
-
-.modal-content {
+.stat-card {
   background: white;
-  border-radius: 1rem;
-  width: 90%;
-  max-width: 600px;
-  max-height: 90vh;
-  overflow-y: auto;
-  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+  border-radius: 0.75rem;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
 }
 
-.modal-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+.stat-content {
   padding: 1.5rem;
-  border-bottom: 1px solid #e5e7eb;
 }
 
-.modal-title {
+.stat-value {
   font-size: 1.5rem;
-  font-weight: 600;
-  color: #1e293b;
+  line-height: 2rem;
+  font-weight: 700;
+  color: #111827;
+}
+
+/* Modal responsive pour mobile */
+.mobile-modal-container {
+  padding: 0;
   margin: 0;
 }
 
-.modal-close {
-  background: none;
-  border: none;
-  cursor: pointer;
-  padding: 0.5rem;
-  border-radius: 0.5rem;
-  color: #64748b;
-  transition: background-color 0.2s;
+.modal-container {
+  margin: 0.5rem;
+  max-height: calc(100vh - 1rem);
+  width: calc(100% - 1rem);
+  max-width: 32rem;
 }
 
-.modal-close:hover {
-  background: #f1f5f9;
+.modal-header-content {
+  padding: 1rem 1.5rem;
+  background: linear-gradient(to right, #f97316, #ea580c);
 }
 
-.modal-form {
-  padding: 1.5rem;
-}
-
-.form-group {
-  margin-bottom: 1rem;
-}
-
-.form-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 1rem;
-}
-
-.form-label {
-  display: block;
+.modal-title {
+  font-size: 1.125rem;
+  line-height: 1.75rem;
   font-weight: 600;
-  color: #374151;
-  margin-bottom: 0.5rem;
+  color: white;
+}
+
+.modal-subtitle {
   font-size: 0.875rem;
+  color: #fed7aa;
 }
 
-.form-input,
-.form-select {
-  width: 100%;
-  padding: 0.75rem;
-  border: 2px solid #e2e8f0;
-  border-radius: 0.5rem;
-  font-size: 0.875rem;
-  transition: border-color 0.2s;
+.modal-body-content {
+  padding: 1.5rem;
+  max-height: 24rem;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
-.form-input:focus,
-.form-select:focus {
-  outline: none;
-  border-color: #3b82f6;
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
-}
-
-.checkbox-group {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.checkbox-label {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  cursor: pointer;
-}
-
-.checkbox-input {
-  width: 1rem;
-  height: 1rem;
-  accent-color: #3b82f6;
-}
-
-.checkbox-text {
-  font-size: 0.875rem;
-  color: #374151;
-}
-
-.modal-actions {
+.modal-footer-content {
+  padding: 1rem 1.5rem;
+  background: #f9fafb;
   display: flex;
   justify-content: flex-end;
-  gap: 1rem;
-  margin-top: 2rem;
-  padding-top: 1rem;
-  border-top: 1px solid #e5e7eb;
+  gap: 0.75rem;
+}
+
+.btn-cancel,
+.btn-submit {
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  border-radius: 0.5rem;
+  transition: all 0.2s;
+}
+
+.btn-cancel {
+  color: #374151;
+  background: white;
+  border: 1px solid #d1d5db;
+}
+
+.btn-cancel:hover {
+  background: #f9fafb;
+}
+
+.btn-submit {
+  color: white;
+  background: linear-gradient(to right, #f97316, #ea580c);
+}
+
+.btn-submit:hover {
+  background: linear-gradient(to right, #ea580c, #c2410c);
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+  .modal-container {
+    margin: 0.25rem;
+    max-height: calc(100vh - 0.5rem);
+    width: calc(100% - 0.5rem);
+  }
+
+  .modal-body-content {
+    max-height: calc(100vh - 12rem);
+    padding: 1rem;
+  }
+
+  .modal-header-content {
+    padding: 0.75rem 1rem;
+  }
+
+  .modal-footer-content {
+    padding: 0.75rem 1rem;
+    flex-direction: column;
+  }
+
+  .btn-cancel,
+  .btn-submit {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .page-title {
+    font-size: 1.5rem;
+    line-height: 2rem;
+}
+
+.action-button {
+    width: 100%;
+    justify-content: center;
+    margin-top: 1rem;
+  }
+
+  .stat-content {
+    padding: 1rem;
+  }
+
+  .stat-value {
+    font-size: 1.25rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .modal-container {
+    margin: 0.125rem;
+    max-height: calc(100vh - 0.25rem);
+    width: calc(100% - 0.25rem);
+  }
+
+  .modal-body-content {
+    max-height: calc(100vh - 10rem);
+    padding: 0.75rem;
+  }
+
+  .modal-header-content {
+    padding: 0.5rem 0.75rem;
+  }
+
+  .modal-footer-content {
+    padding: 0.5rem 0.75rem;
+  }
+
+  .page-title {
+    font-size: 1.25rem;
+    line-height: 1.75rem;
+  }
+
+  .stat-content {
+    padding: 0.75rem;
+  }
+
+  .stat-value {
+    font-size: 1.125rem;
+  }
+}
+
+/* Améliorations pour le scroll sur mobile */
+.modal-body-content {
+  scrollbar-width: thin;
+  scrollbar-color: #d1d5db #f3f4f6;
+}
+
+.modal-body-content::-webkit-scrollbar {
+  width: 6px;
+}
+
+.modal-body-content::-webkit-scrollbar-track {
+  background: #f3f4f6;
+  border-radius: 3px;
+}
+
+.modal-body-content::-webkit-scrollbar-thumb {
+  background: #d1d5db;
+  border-radius: 3px;
+}
+
+.modal-body-content::-webkit-scrollbar-thumb:hover {
+  background: #9ca3af;
+}
+
+/* Assurer que les inputs sont accessibles sur mobile */
+input, select, textarea {
+  font-size: 16px; /* Évite le zoom automatique sur iOS */
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+}
+
+/* Améliorer l'espacement des touches sur mobile */
+button {
+  min-height: 44px; /* Taille minimale recommandée pour les touches tactiles */
+}
+
+/* Animations */
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.stat-card {
+  animation: slideIn 0.3s ease-out;
 }
 </style>

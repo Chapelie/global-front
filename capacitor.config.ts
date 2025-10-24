@@ -35,6 +35,30 @@ const config: CapacitorConfig = {
     allowMixedContent: true,
     backgroundColor: '#ffffff',
     webContentsDebuggingEnabled: false
+  },
+
+  // 👇 Section pour les assets (logo et splash)
+  assets: {
+    android: {
+      iconBackgroundColor: '#ffffff',
+      iconBackgroundColorDark: '#000000',
+      splashBackgroundColor: '#ffffff',
+      splashBackgroundColorDark: '#000000',
+      icon: {
+        source: 'src/assets/logo.jpeg'
+      },
+      splash: {
+        source: 'src/assets/logo.jpeg'
+      }
+    },
+    ios: {
+      icon: {
+        source: 'src/assets/logo.jpeg'
+      },
+      splash: {
+        source: 'src/assets/logo.jpeg'
+      }
+    }
   }
 };
 

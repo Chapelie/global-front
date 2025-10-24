@@ -131,3 +131,5 @@ export declare function deleteUser(id: number): Promise<boolean>
 export declare function getMode(): string
 
 
+
+

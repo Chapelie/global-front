@@ -1,584 +1,573 @@
+<script setup lang="ts">
+import { ref, computed, onMounted } from 'vue'
+import { useLaravelApi } from '../services/laravelApiService'
+import {
+  DocumentTextIcon,
+  TruckIcon,
+  CalendarIcon,
+  UserIcon,
+  EyeIcon,
+  ArrowDownTrayIcon,
+  PrinterIcon,
+  MagnifyingGlassIcon,
+  FunnelIcon,
+  DocumentArrowDownIcon,
+  CheckCircleIcon,
+  ClockIcon,
+  ExclamationTriangleIcon
+} from '@heroicons/vue/24/outline'
+
+// Services
+const { getLivraisons, getCommandes } = useLaravelApi()
+
+// État réactif
+const documents = ref<any[]>([])
+const isLoading = ref(false)
+const searchTerm = ref('')
+const selectedStatus = ref('all')
+const selectedPeriod = ref('all')
+const showFilters = ref(false)
+
+// Computed
+const filteredDocuments = computed(() => {
+  let filtered = documents.value
+
+  // Filtre par recherche
+  if (searchTerm.value) {
+    filtered = filtered.filter(doc => 
+      doc.numero_bl?.toLowerCase().includes(searchTerm.value.toLowerCase()) ||
+      doc.client?.nom?.toLowerCase().includes(searchTerm.value.toLowerCase()) ||
+      doc.client?.email?.toLowerCase().includes(searchTerm.value.toLowerCase())
+    )
+  }
+
+  // Filtre par statut
+  if (selectedStatus.value !== 'all') {
+    filtered = filtered.filter(doc => doc.statut === selectedStatus.value)
+  }
+
+  // Filtre par période
+  if (selectedPeriod.value !== 'all') {
+    const now = new Date()
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+    
+    filtered = filtered.filter(doc => {
+      const docDate = new Date(doc.date)
+      
+      switch (selectedPeriod.value) {
+        case 'today':
+          return docDate >= today
+        case 'week':
+          const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000)
+          return docDate >= weekAgo
+        case 'month':
+          const monthAgo = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000)
+          return docDate >= monthAgo
+        default:
+          return true
+      }
+    })
+  }
+
+  return filtered.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+})
+
+const totalDocuments = computed(() => documents.value.length)
+const totalBL = computed(() => documents.value.filter(doc => doc.type === 'bl').length)
+const totalCommandes = computed(() => documents.value.filter(doc => doc.type === 'commande').length)
+
+// Charger les données
+onMounted(async () => {
+  await loadDocuments()
+})
+
+const loadDocuments = async () => {
+  try {
+    isLoading.value = true
+    
+    // Charger les livraisons (BL)
+    const livraisons = await getLivraisons()
+    const blDocuments = livraisons.map(livraison => ({
+      ...livraison,
+      type: 'bl',
+      numero_bl: livraison.numero_bl || `BL-${livraison.id}`,
+      date: livraison.date,
+      statut: livraison.statut || 'livre',
+      client: livraison.client || { nom: 'Client non défini' },
+      montant_total: livraison.total_livraison || livraison.total_commande || 0,
+      total_commande: livraison.total_commande || 0,
+      total_livraison: livraison.total_livraison || 0,
+      produits: livraison.produits || []
+    }))
+
+    // Charger les commandes
+    const commandes = await getCommandes()
+    const commandeDocuments = commandes.map(commande => ({
+      ...commande,
+      type: 'commande',
+      numero_bl: commande.numero_commande || `CMD-${commande.id}`,
+      date: commande.date,
+      statut: commande.statut || 'en_attente',
+      client: commande.client || { nom: 'Client non défini' },
+      montant_total: commande.total_livraisons || commande.total_restant || 0,
+      produits: commande.produits || []
+    }))
+
+    documents.value = [...blDocuments, ...commandeDocuments]
+  } catch (error) {
+    console.error('Erreur lors du chargement des documents:', error)
+    alert('Erreur lors du chargement des documents')
+  } finally {
+    isLoading.value = false
+  }
+}
+
+// Actions
+const viewDocument = (document: any) => {
+  // Ouvrir le document en modal ou nouvelle page
+  console.log('Voir document:', document)
+  alert(`Voir le document ${document.numero_bl}`)
+}
+
+const downloadDocument = (document: any) => {
+  // Télécharger le document PDF
+  console.log('Télécharger document:', document)
+  alert(`Télécharger le document ${document.numero_bl}`)
+}
+
+const printDocument = (document: any) => {
+  // Imprimer le document
+  console.log('Imprimer document:', document)
+  alert(`Imprimer le document ${document.numero_bl}`)
+}
+
+const refreshDocuments = async () => {
+  await loadDocuments()
+}
+
+// Fonctions utilitaires
+const formatDate = (dateString: string) => {
+  return new Date(dateString).toLocaleDateString('fr-FR')
+}
+
+const formatCurrency = (amount: number) => {
+  return new Intl.NumberFormat('fr-FR', {
+    style: 'currency',
+    currency: 'XOF'
+  }).format(amount)
+}
+
+const getStatusColor = (status: string) => {
+  switch (status) {
+    case 'livre':
+    case 'termine':
+      return 'bg-green-100 text-green-800'
+    case 'en_cours':
+    case 'en_attente':
+      return 'bg-yellow-100 text-yellow-800'
+    case 'annule':
+      return 'bg-red-100 text-red-800'
+    default:
+      return 'bg-gray-100 text-gray-800'
+  }
+}
+
+const getStatusIcon = (status: string) => {
+  switch (status) {
+    case 'livre':
+    case 'termine':
+      return CheckCircleIcon
+    case 'en_cours':
+    case 'en_attente':
+      return ClockIcon
+    case 'annule':
+      return ExclamationTriangleIcon
+    default:
+      return ClockIcon
+  }
+}
+
+const getStatusLabel = (status: string) => {
+  switch (status) {
+    case 'livre':
+      return 'Livré'
+    case 'termine':
+      return 'Terminé'
+    case 'en_cours':
+      return 'En cours'
+    case 'en_attente':
+      return 'En attente'
+    case 'annule':
+      return 'Annulé'
+    default:
+      return status
+  }
+}
+
+const getTypeColor = (type: string) => {
+  switch (type) {
+    case 'bl':
+      return 'bg-blue-100 text-blue-800'
+    case 'commande':
+      return 'bg-purple-100 text-purple-800'
+    default:
+      return 'bg-gray-100 text-gray-800'
+  }
+}
+
+const getTypeLabel = (type: string) => {
+  switch (type) {
+    case 'bl':
+      return 'Bon de Livraison'
+    case 'commande':
+      return 'Commande'
+    default:
+      return type
+  }
+}
+</script>
+
 <template>
-  <div class="documents-container">
-    <!-- Header moderne -->
-    <div class="documents-header">
-      <div class="header-content">
-        <div class="header-main">
-          <div class="flex items-center">
-            <div class="h-12 w-12 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-500 flex items-center justify-center mr-4 shadow-lg">
+  <div class="documents-container min-h-screen bg-gray-50">
+    <!-- Header -->
+    <div class="header-content bg-white border-b border-gray-200 shadow-sm">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between">
+          <div class="flex items-center mb-4 sm:mb-0">
+            <div class="h-12 w-12 rounded-xl bg-gradient-to-r from-orange-500 to-orange-600 flex items-center justify-center shadow-lg mr-4">
               <DocumentTextIcon class="h-6 w-6 text-white" />
             </div>
             <div>
-              <h1 class="page-title">Documents</h1>
-              <p class="page-subtitle">Gestion de vos bons de livraison et documents</p>
+              <h1 class="page-title text-2xl font-bold text-gray-900">Documents</h1>
+              <p class="text-sm text-gray-600">Bons de livraison et documents générés</p>
             </div>
+          </div>
+          
+          <div class="flex space-x-3">
+            <button
+              @click="showFilters = !showFilters"
+              class="inline-flex items-center px-4 py-2 bg-gray-100 text-gray-700 font-medium rounded-xl hover:bg-gray-200 transition-all duration-200"
+            >
+              <FunnelIcon class="h-5 w-5 mr-2" />
+              Filtres
+            </button>
+            <button
+              @click="refreshDocuments"
+              :disabled="isLoading"
+              class="inline-flex items-center px-4 py-2 bg-gradient-to-r from-orange-500 to-orange-600 text-white font-medium rounded-xl shadow-lg hover:from-orange-600 hover:to-orange-700 transition-all duration-200 transform hover:scale-105 disabled:opacity-50"
+            >
+              <ArrowDownTrayIcon class="h-5 w-5 mr-2" />
+              Actualiser
+            </button>
           </div>
         </div>
       </div>
     </div>
 
-    <div class="main-content">
-      <!-- KPI Cards modernisés -->
-      <div class="stats-grid">
-        <div class="stat-card">
-          <div class="stat-content">
-            <div class="stat-icon-wrapper stat-blue">
-              <DocumentTextIcon class="stat-icon" />
-            </div>
-            <div class="stat-details">
-              <dt class="stat-label">Total documents</dt>
-              <dd class="stat-value">{{ documents.length }}</dd>
-              <dd class="stat-unit">documents</dd>
-            </div>
-          </div>
-        </div>
-
-        <div class="stat-card">
-          <div class="stat-content">
-            <div class="stat-icon-wrapper stat-green">
-              <TruckIcon class="stat-icon" />
-            </div>
-            <div class="stat-details">
-              <dt class="stat-label">Bons de livraison</dt>
-              <dd class="stat-value">{{ bonsDeLivraison.length }}</dd>
-              <dd class="stat-unit">BL</dd>
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      <!-- Statistiques -->
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+        <div class="stat-card bg-white rounded-xl shadow-lg overflow-hidden">
+          <div class="stat-content p-6">
+            <div class="flex items-center">
+              <div class="h-12 w-12 rounded-xl bg-gradient-to-r from-blue-500 to-blue-600 flex items-center justify-center shadow-lg">
+                <DocumentTextIcon class="h-6 w-6 text-white" />
+              </div>
+              <div class="ml-4">
+                <p class="text-sm font-medium text-gray-600">Total documents</p>
+                <p class="stat-value text-2xl font-bold text-gray-900">{{ totalDocuments }}</p>
+              </div>
             </div>
           </div>
         </div>
 
-        <div class="stat-card">
-          <div class="stat-content">
-            <div class="stat-icon-wrapper stat-purple">
-              <ArrowUpIcon class="stat-icon" />
+        <div class="stat-card bg-white rounded-xl shadow-lg overflow-hidden">
+          <div class="stat-content p-6">
+            <div class="flex items-center">
+              <div class="h-12 w-12 rounded-xl bg-gradient-to-r from-green-500 to-green-600 flex items-center justify-center shadow-lg">
+                <TruckIcon class="h-6 w-6 text-white" />
+              </div>
+              <div class="ml-4">
+                <p class="text-sm font-medium text-gray-600">Bons de livraison</p>
+                <p class="stat-value text-2xl font-bold text-gray-900">{{ totalBL }}</p>
+              </div>
             </div>
-            <div class="stat-details">
-              <dt class="stat-label">Espace utilisé</dt>
-              <dd class="stat-value">{{ formatSize(totalSize) }}</dd>
-              <dd class="stat-unit">stockage</dd>
+          </div>
+        </div>
+
+        <div class="stat-card bg-white rounded-xl shadow-lg overflow-hidden">
+          <div class="stat-content p-6">
+            <div class="flex items-center">
+              <div class="h-12 w-12 rounded-xl bg-gradient-to-r from-purple-500 to-purple-600 flex items-center justify-center shadow-lg">
+                <DocumentArrowDownIcon class="h-6 w-6 text-white" />
+              </div>
+              <div class="ml-4">
+                <p class="text-sm font-medium text-gray-600">Commandes</p>
+                <p class="stat-value text-2xl font-bold text-gray-900">{{ totalCommandes }}</p>
+              </div>
             </div>
           </div>
         </div>
       </div>
 
-      <!-- Filtres modernisés -->
-      <div class="filters-section">
-        <div class="filters-grid">
-          <div class="filter-group">
-            <label class="filter-label">Recherche</label>
-            <input
-              v-model="searchTerm"
-              type="text"
-              placeholder="Rechercher un document..."
-              class="filter-input"
-            />
+      <!-- Filtres -->
+      <div v-if="showFilters" class="bg-white rounded-xl shadow-lg p-6 mb-6">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <!-- Recherche -->
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-2">Rechercher</label>
+            <div class="relative">
+              <MagnifyingGlassIcon class="h-5 w-5 absolute left-3 top-3 text-gray-400" />
+              <input
+                v-model="searchTerm"
+                type="text"
+                placeholder="Numéro BL, client..."
+                class="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+              />
+            </div>
           </div>
 
-          <div class="filter-group">
-            <label class="filter-label">Type</label>
-            <select v-model="selectedType" class="filter-select">
-              <option value="">Tous les types</option>
-              <option value="delivery_note">Bon de livraison</option>
-              <option value="invoice">Facture</option>
-              <option value="receipt">Reçu</option>
-              <option value="report">Rapport</option>
+          <!-- Statut -->
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-2">Statut</label>
+            <select
+              v-model="selectedStatus"
+              class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+            >
+              <option value="all">Tous les statuts</option>
+              <option value="livre">Livré</option>
+              <option value="en_cours">En cours</option>
+              <option value="en_attente">En attente</option>
+              <option value="annule">Annulé</option>
+            </select>
+          </div>
+
+          <!-- Période -->
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-2">Période</label>
+            <select
+              v-model="selectedPeriod"
+              class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+            >
+              <option value="all">Toutes les périodes</option>
+              <option value="today">Aujourd'hui</option>
+              <option value="week">Cette semaine</option>
+              <option value="month">Ce mois</option>
             </select>
           </div>
         </div>
       </div>
 
       <!-- Liste des documents -->
-      <div class="documents-grid">
-        <div
-          v-for="document in filteredDocuments"
-          :key="document.id"
-          class="document-card"
-        >
-          <div class="document-header">
-            <div class="document-icon-wrapper">
-              <DocumentTextIcon class="document-icon" />
-            </div>
-            <div class="document-info">
-              <h3 class="document-title">{{ document.titre }}</h3>
-              <p class="document-description">{{ document.numero }}</p>
-            </div>
-          </div>
+      <div class="bg-white rounded-xl shadow-lg overflow-hidden">
+        <div class="px-6 py-4 border-b border-gray-200">
+          <h2 class="text-lg font-semibold text-gray-900">
+            Documents ({{ filteredDocuments.length }})
+          </h2>
+        </div>
 
-          <div class="document-meta">
-            <span class="document-type">{{ getTypeLabel(document.type) }}</span>
-            <span class="document-size">{{ document.file_size }}</span>
-          </div>
+        <!-- Tableau des documents -->
+        <div class="overflow-x-auto">
+          <table class="min-w-full divide-y divide-gray-200">
+            <thead class="bg-gray-50">
+              <tr>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Document</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Client</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Montant</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Statut</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+              </tr>
+            </thead>
+            <tbody class="bg-white divide-y divide-gray-200">
+              <tr v-for="document in filteredDocuments" :key="document.id" class="hover:bg-gray-50">
+                <td class="px-6 py-4 whitespace-nowrap">
+                  <div class="flex items-center">
+                    <div class="h-10 w-10 rounded-full bg-gradient-to-r from-orange-500 to-orange-600 flex items-center justify-center shadow-lg mr-4">
+                      <DocumentTextIcon class="h-5 w-5 text-white" />
+                    </div>
+                    <div>
+                      <div class="text-sm font-medium text-gray-900">{{ document.numero_bl }}</div>
+                      <span :class="[
+                        'inline-flex items-center px-2 py-1 rounded-full text-xs font-medium',
+                        getTypeColor(document.type)
+                      ]">
+                        {{ getTypeLabel(document.type) }}
+                      </span>
+                    </div>
+                  </div>
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap">
+                  <div class="text-sm text-gray-900">{{ document.client?.nom || 'N/A' }}</div>
+                  <div class="text-sm text-gray-500">{{ document.client?.email || '' }}</div>
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap">
+                  <div class="text-sm text-gray-900">{{ formatDate(document.date) }}</div>
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap">
+                  <div class="text-sm font-bold text-green-600">{{ formatCurrency(document.montant_total) }}</div>
+                  <div v-if="document.type === 'bl'" class="text-xs text-gray-500">
+                    {{ document.total_commande ? `Commande: ${formatCurrency(document.total_commande)}` : '' }}
+                  </div>
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap">
+                  <span :class="[
+                    'inline-flex items-center px-2 py-1 rounded-full text-xs font-medium',
+                    getStatusColor(document.statut)
+                  ]">
+                    <component
+                      :is="getStatusIcon(document.statut)"
+                      class="h-3 w-3 mr-1"
+                    />
+                    {{ getStatusLabel(document.statut) }}
+                  </span>
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                  <div class="flex space-x-2">
+                    <button
+                      @click="viewDocument(document)"
+                      class="text-orange-600 hover:text-orange-900 transition-colors"
+                      title="Voir"
+                    >
+                      <EyeIcon class="h-4 w-4" />
+                    </button>
+                    <button
+                      @click="downloadDocument(document)"
+                      class="text-blue-600 hover:text-blue-900 transition-colors"
+                      title="Télécharger"
+                    >
+                      <ArrowDownTrayIcon class="h-4 w-4" />
+                    </button>
+                    <button
+                      @click="printDocument(document)"
+                      class="text-green-600 hover:text-green-900 transition-colors"
+                      title="Imprimer"
+                    >
+                      <PrinterIcon class="h-4 w-4" />
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
 
-          <div class="document-actions">
-            <a
-              :href="document.file_url"
-              target="_blank"
-              class="action-button action-primary"
-            >
-              <EyeIcon class="h-4 w-4 mr-2" />
-              Voir
-            </a>
+        <!-- Message si aucun document -->
+        <div v-if="filteredDocuments.length === 0" class="text-center py-12">
+          <DocumentTextIcon class="h-12 w-12 text-gray-400 mx-auto mb-4" />
+          <h3 class="text-lg font-medium text-gray-900 mb-2">Aucun document trouvé</h3>
+          <p class="text-gray-600">
+            {{ searchTerm || selectedStatus !== 'all' || selectedPeriod !== 'all' 
+              ? 'Aucun document ne correspond aux critères de recherche.' 
+              : 'Commencez par générer vos premiers documents.' 
+            }}
+          </p>
+        </div>
 
-            <a
-              :href="document.file_url"
-              download
-              class="action-button action-secondary"
-            >
-              <ArrowDownIcon class="h-4 w-4 mr-2" />
-              Télécharger
-            </a>
-
-            <button @click="handleDeleteDocument(document.id)" class="action-button action-danger">
-              <TrashIcon class="h-4 w-4 mr-2" />
-              Supprimer
-            </button>
+        <!-- Loading -->
+        <div v-if="isLoading" class="text-center py-12">
+          <div class="inline-flex items-center">
+            <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-500"></div>
+            <span class="ml-3 text-gray-600">Chargement des documents...</span>
           </div>
         </div>
-      </div>
-
-      <!-- État vide -->
-      <div v-if="filteredDocuments.length === 0" class="empty-state">
-        <div class="empty-icon-wrapper">
-          <DocumentTextIcon class="empty-icon" />
-        </div>
-        <h3 class="empty-title">Aucun document</h3>
-        <p class="empty-subtitle">Les documents générés apparaîtront ici</p>
       </div>
     </div>
   </div>
 </template>
 
-<script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
-import { useLaravelApi } from '@/services/laravelApiService'
-import {
-  DocumentTextIcon,
-  TruckIcon,
-  ArrowUpIcon,
-  EyeIcon,
-  ArrowDownIcon,
-  TrashIcon
-} from '@heroicons/vue/24/outline'
-
-const { getDocuments, deleteDocument } = useLaravelApi()
-
-// État réactif
-const documents = ref<any[]>([])
-const searchTerm = ref('')
-const selectedType = ref('')
-
-// Computed
-const bonsDeLivraison = computed(() =>
-  documents.value.filter(d => d.type === 'delivery_note')
-)
-
-const totalSize = computed(() =>
-  documents.value.reduce((sum, doc) => sum + (parseFileSize(doc.file_size) || 0), 0)
-)
-
-const filteredDocuments = computed(() => {
-  return documents.value.filter(document => {
-    const matchesSearch = document.titre.toLowerCase().includes(searchTerm.value.toLowerCase()) ||
-                         document.numero?.toLowerCase().includes(searchTerm.value.toLowerCase())
-    const matchesType = !selectedType.value || document.type === selectedType.value
-
-    return matchesSearch && matchesType
-  })
-})
-
-// Méthodes
-const loadDocuments = async () => {
-  try {
-    console.log('🔍 [DocumentsView] Chargement des documents...')
-    documents.value = await getDocuments()
-    console.log('✅ [DocumentsView] Documents chargés:', documents.value.length)
-  } catch (error) {
-    console.error('❌ [DocumentsView] Erreur lors du chargement des documents:', error)
-  }
-}
-
-const handleDeleteDocument = async (id: string) => {
-  if (confirm('Êtes-vous sûr de vouloir supprimer ce document ?')) {
-    try {
-      console.log('🗑️ [DocumentsView] Suppression du document:', id)
-      await deleteDocument(Number(id))
-      await loadDocuments()
-      console.log('✅ [DocumentsView] Document supprimé')
-    } catch (error) {
-      console.error('❌ [DocumentsView] Erreur lors de la suppression:', error)
-    }
-  }
-}
-
-const getTypeLabel = (type: string) => {
-  const labels: Record<string, string> = {
-    'delivery_note': 'Bon de livraison',
-    'invoice': 'Facture',
-    'receipt': 'Reçu',
-    'report': 'Rapport'
-  }
-  return labels[type] || type
-}
-
-const parseFileSize = (sizeStr: string): number => {
-  if (!sizeStr) return 0
-  const match = sizeStr.match(/^([\d.]+)\s*([A-Z]+)$/)
-  if (!match) return 0
-
-  const size = parseFloat(match[1])
-  const unit = match[2]
-
-  const multipliers: Record<string, number> = {
-    'B': 1,
-    'KB': 1024,
-    'MB': 1024 * 1024,
-    'GB': 1024 * 1024 * 1024
-  }
-
-  return size * (multipliers[unit] || 1)
-}
-
-const formatSize = (bytes: number) => {
-  if (bytes === 0) return '0 B'
-  const k = 1024
-  const sizes = ['B', 'KB', 'MB', 'GB']
-  const i = Math.floor(Math.log(bytes) / Math.log(k))
-  return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i]
-}
-
-// Lifecycle
-onMounted(() => {
-  loadDocuments()
-})
-</script>
-
 <style scoped>
-/* Container principal */
+/* Styles de base */
 .documents-container {
   min-height: 100vh;
-  background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
-  padding: 2rem;
-}
-
-/* Header moderne */
-.documents-header {
-  margin-bottom: 2rem;
-}
-
-.header-content {
-  background: white;
-  border-radius: 1rem;
-  padding: 2rem;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-}
-
-.header-main {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
 }
 
 .page-title {
-  font-size: 2rem;
+  font-size: 1.875rem;
+  line-height: 2.25rem;
   font-weight: 700;
-  color: #1e293b;
-  margin: 0;
-}
-
-.page-subtitle {
-  color: #64748b;
-  font-size: 1rem;
-  margin: 0.5rem 0 0 0;
-}
-
-/* Contenu principal */
-.main-content {
-  max-width: 1400px;
-  margin: 0 auto;
-}
-
-/* Grille des statistiques */
-.stats-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 1.5rem;
-  margin-bottom: 2rem;
+  color: #111827;
 }
 
 .stat-card {
   background: white;
-  border-radius: 1rem;
-  padding: 1.5rem;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-  transition: transform 0.2s, box-shadow 0.2s;
-}
-
-.stat-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 10px 25px -3px rgba(0, 0, 0, 0.1);
+  border-radius: 0.75rem;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
 }
 
 .stat-content {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-}
-
-.stat-icon-wrapper {
-  width: 3rem;
-  height: 3rem;
-  border-radius: 0.75rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.stat-blue {
-  background: linear-gradient(135deg, #3b82f6, #1d4ed8);
-}
-
-.stat-green {
-  background: linear-gradient(135deg, #10b981, #059669);
-}
-
-.stat-purple {
-  background: linear-gradient(135deg, #8b5cf6, #7c3aed);
-}
-
-.stat-icon {
-  width: 1.5rem;
-  height: 1.5rem;
-  color: white;
-}
-
-.stat-details {
-  flex: 1;
-}
-
-.stat-label {
-  font-size: 0.875rem;
-  color: #64748b;
-  margin: 0;
+  padding: 1.5rem;
 }
 
 .stat-value {
-  font-size: 2rem;
+  font-size: 1.5rem;
+  line-height: 2rem;
   font-weight: 700;
-  color: #1e293b;
-  margin: 0.25rem 0 0 0;
+  color: #111827;
 }
 
-.stat-unit {
-  font-size: 0.75rem;
-  color: #94a3b8;
-  margin: 0;
+/* Responsive design */
+@media (max-width: 768px) {
+  .page-title {
+    font-size: 1.5rem;
+    line-height: 2rem;
+  }
+
+  .stat-content {
+    padding: 1rem;
+  }
+
+  .stat-value {
+    font-size: 1.25rem;
+  }
+
+  .overflow-x-auto {
+    font-size: 0.875rem;
+  }
 }
 
-/* Section des filtres */
-.filters-section {
-  background: white;
-  border-radius: 1rem;
-  padding: 1.5rem;
-  margin-bottom: 2rem;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+@media (max-width: 480px) {
+  .page-title {
+    font-size: 1.25rem;
+    line-height: 1.75rem;
+  }
+
+  .stat-content {
+    padding: 0.75rem;
+  }
+
+  .stat-value {
+    font-size: 1.125rem;
+  }
 }
 
-.filters-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-  gap: 1rem;
+/* Animations */
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
-.filter-group {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
+.stat-card {
+  animation: slideIn 0.3s ease-out;
 }
 
-.filter-label {
-  font-weight: 600;
-  color: #374151;
-  font-size: 0.875rem;
+/* Améliorer l'espacement des touches sur mobile */
+button {
+  min-height: 44px;
 }
 
-.filter-input,
-.filter-select {
-  padding: 0.75rem;
-  border: 2px solid #e2e8f0;
-  border-radius: 0.5rem;
-  font-size: 0.875rem;
-  transition: border-color 0.2s;
-}
-
-.filter-input:focus,
-.filter-select:focus {
-  outline: none;
-  border-color: #3b82f6;
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
-}
-
-/* Grille des documents */
-.documents-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
-  gap: 1.5rem;
-}
-
-.document-card {
-  background: white;
-  border-radius: 1rem;
-  padding: 1.5rem;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-  transition: transform 0.2s, box-shadow 0.2s;
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-}
-
-.document-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 10px 25px -3px rgba(0, 0, 0, 0.1);
-}
-
-.document-header {
-  display: flex;
-  align-items: flex-start;
-  gap: 1rem;
-}
-
-.document-icon-wrapper {
-  width: 3rem;
-  height: 3rem;
-  background: linear-gradient(135deg, #f1f5f9, #e2e8f0);
-  border-radius: 0.75rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-
-.document-icon {
-  width: 1.5rem;
-  height: 1.5rem;
-  color: #64748b;
-}
-
-.document-info {
-  flex: 1;
-}
-
-.document-title {
-  font-size: 1.125rem;
-  font-weight: 600;
-  color: #1e293b;
-  margin: 0 0 0.5rem 0;
-}
-
-.document-description {
-  color: #64748b;
-  font-size: 0.875rem;
-  margin: 0;
-}
-
-.document-meta {
-  display: flex;
-  gap: 1rem;
-  font-size: 0.75rem;
-  color: #64748b;
-}
-
-.document-type {
-  padding: 0.25rem 0.75rem;
-  background: #f1f5f9;
-  border-radius: 9999px;
-  font-weight: 500;
-}
-
-.document-actions {
-  display: flex;
-  gap: 0.5rem;
-  flex-wrap: wrap;
-}
-
-.action-button {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.5rem 1rem;
-  border-radius: 0.5rem;
-  font-weight: 500;
-  text-decoration: none;
-  border: none;
-  cursor: pointer;
-  transition: all 0.2s;
-  font-size: 0.875rem;
-}
-
-.action-primary {
-  background: #3b82f6;
-  color: white;
-}
-
-.action-primary:hover {
-  background: #2563eb;
-  transform: translateY(-1px);
-}
-
-.action-secondary {
-  background: #64748b;
-  color: white;
-}
-
-.action-secondary:hover {
-  background: #475569;
-  transform: translateY(-1px);
-}
-
-.action-danger {
-  background: #ef4444;
-  color: white;
-}
-
-.action-danger:hover {
-  background: #dc2626;
-  transform: translateY(-1px);
-}
-
-/* État vide */
-.empty-state {
-  text-align: center;
-  padding: 4rem 2rem;
-  background: white;
-  border-radius: 1rem;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-}
-
-.empty-icon-wrapper {
-  width: 4rem;
-  height: 4rem;
-  background: linear-gradient(135deg, #f1f5f9, #e2e8f0);
-  border-radius: 1rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin: 0 auto 1rem;
-}
-
-.empty-icon {
-  width: 2rem;
-  height: 2rem;
-  color: #94a3b8;
-}
-
-.empty-title {
-  font-size: 1.25rem;
-  font-weight: 600;
-  color: #1e293b;
-  margin: 0 0 0.5rem 0;
-}
-
-.empty-subtitle {
-  color: #64748b;
-  font-size: 0.875rem;
-  margin: 0;
+/* Assurer que les inputs sont accessibles sur mobile */
+input, select {
+  font-size: 16px;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
 }
 </style>
