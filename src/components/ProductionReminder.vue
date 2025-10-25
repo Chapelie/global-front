@@ -309,3 +309,6 @@ const getBgColor = (type: string) => {
   }
 }
 </style>
+
+
+
