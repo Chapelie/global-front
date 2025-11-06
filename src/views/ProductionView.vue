@@ -122,11 +122,17 @@
           </div>
           <div class="flex items-center text-sm text-gray-600 mb-2">
             <CubeIcon class="h-4 w-4 mr-2" />
-            <span>{{ production.quantite_ciment || 0 }}kg ciment</span>
+            <span v-if="production.ciment">
+              {{ production.quantite_ciment_sacs || 0 }} sacs - {{ production.ciment.nom }}
+            </span>
+            <span v-else>{{ production.quantite_ciment_sacs || 0 }} sacs</span>
           </div>
           <div class="flex items-center text-sm text-gray-600">
             <BeakerIcon class="h-4 w-4 mr-2" />
-            <span>{{ production.quantite_adjuvant || 0 }}kg adjuvant</span>
+            <span v-if="production.adjuvant">
+              {{ production.quantite_adjuvant_litres || 0 }} litres - {{ production.adjuvant.nom }}
+            </span>
+            <span v-else>{{ production.quantite_adjuvant_litres || 0 }} litres</span>
           </div>
         </div>
 
@@ -198,23 +204,59 @@
             </div>
 
             <div>
-              <label class="block text-sm font-medium text-gray-700 mb-2">Quantité de ciment (kg)</label>
-              <input 
-                v-model.number="newProduction.quantite_ciment" 
-                type="number" 
-                min="0"
+              <label class="block text-sm font-medium text-gray-700 mb-2">Ciment utilisé <span class="text-red-500">*</span></label>
+              <select 
+                v-model="newProduction.ciment_id" 
+                required
                 class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-              />
+              >
+                <option value="">Sélectionner un ciment</option>
+                <option 
+                  v-for="ciment in cimentsDisponibles" 
+                  :key="ciment.id" 
+                  :value="ciment.id"
+                >
+                  {{ ciment.nom }} (Stock: {{ ciment.stock_actuel }} sacs)
+                </option>
+              </select>
+              <div v-if="newProduction.ciment_id" class="mt-2">
+                <label class="block text-sm font-medium text-gray-700 mb-2">Quantité (sacs) <span class="text-red-500">*</span></label>
+                <input 
+                  v-model.number="newProduction.quantite_ciment_sacs" 
+                  type="number" 
+                  min="1"
+                  required
+                  class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                />
+              </div>
             </div>
 
             <div>
-              <label class="block text-sm font-medium text-gray-700 mb-2">Quantité d'adjuvant (kg)</label>
-              <input 
-                v-model.number="newProduction.quantite_adjuvant" 
-                type="number" 
-                min="0"
+              <label class="block text-sm font-medium text-gray-700 mb-2">Adjuvant utilisé <span class="text-red-500">*</span></label>
+              <select 
+                v-model="newProduction.adjuvant_id" 
+                required
                 class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-              />
+              >
+                <option value="">Sélectionner un adjuvant</option>
+                <option 
+                  v-for="adjuvant in adjuvantsDisponibles" 
+                  :key="adjuvant.id" 
+                  :value="adjuvant.id"
+                >
+                  {{ adjuvant.nom }} (Stock: {{ adjuvant.stock_actuel }} litres)
+                </option>
+              </select>
+              <div v-if="newProduction.adjuvant_id" class="mt-2">
+                <label class="block text-sm font-medium text-gray-700 mb-2">Quantité (litres) <span class="text-red-500">*</span></label>
+                <input 
+                  v-model.number="newProduction.quantite_adjuvant_litres" 
+                  type="number" 
+                  min="1"
+                  required
+                  class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                />
+              </div>
             </div>
           </div>
 
@@ -299,7 +341,8 @@ import {
 } from '@heroicons/vue/24/outline'
 import { useLaravelApi, type LaravelProduction } from '../services/laravelApiService'
 
-const { getProductions, addProduction, updateProduction, deleteProduction, getArticles } = useLaravelApi()
+const api = useLaravelApi()
+const { getProductions, addProduction, updateProduction, deleteProduction, getArticles, getCiments, getAdjuvants } = api
 
 const productions = ref<LaravelProduction[]>([])
 const articlesDisponibles = ref<any[]>([])
@@ -314,9 +357,14 @@ const newProduction = ref({
   lotId: '',
   statut: 'en_attente' as 'en_attente' | 'en_cours' | 'termine' | 'annule',
   articlesProduits: [{ nom: '', quantiteProduite: 0, unite: '' }],
-  quantite_ciment: 0,
-  quantite_adjuvant: 0
+  ciment_id: null as number | null,
+  quantite_ciment_sacs: 0,
+  adjuvant_id: null as number | null,
+  quantite_adjuvant_litres: 0
 })
+
+const cimentsDisponibles = ref<any[]>([])
+const adjuvantsDisponibles = ref<any[]>([])
 
 const filteredProductions = computed(() => {
   let filtered = productions.value
@@ -413,6 +461,30 @@ const loadArticlesDisponibles = async () => {
   }
 }
 
+const loadCimentsDisponibles = async () => {
+  try {
+    console.log('🔍 [ProductionView] Chargement des ciments')
+    const ciments = await getCiments()
+    cimentsDisponibles.value = ciments.filter(c => c.actif && c.stock_actuel > 0)
+    console.log('✅ [ProductionView] Ciments chargés:', cimentsDisponibles.value.length)
+  } catch (error) {
+    console.error('❌ [ProductionView] Erreur lors du chargement des ciments:', error)
+    cimentsDisponibles.value = []
+  }
+}
+
+const loadAdjuvantsDisponibles = async () => {
+  try {
+    console.log('🔍 [ProductionView] Chargement des adjuvants')
+    const adjuvants = await getAdjuvants()
+    adjuvantsDisponibles.value = adjuvants.filter(a => a.actif && a.stock_actuel > 0)
+    console.log('✅ [ProductionView] Adjuvants chargés:', adjuvantsDisponibles.value.length)
+  } catch (error) {
+    console.error('❌ [ProductionView] Erreur lors du chargement des adjuvants:', error)
+    adjuvantsDisponibles.value = []
+  }
+}
+
 const openModal = (production?: LaravelProduction) => {
   if (production) {
     editingProduction.value = production
@@ -421,8 +493,10 @@ const openModal = (production?: LaravelProduction) => {
       lotId: production.lotId || production.lot_id || '',
       statut: production.statut as 'en_attente' | 'en_cours' | 'termine' | 'annule',
       articlesProduits: production.articlesProduits || [],
-      quantite_ciment: production.quantite_ciment || 0,
-      quantite_adjuvant: production.quantite_adjuvant || 0
+      ciment_id: production.ciment_id || null,
+      quantite_ciment_sacs: production.quantite_ciment_sacs || 0,
+      adjuvant_id: production.adjuvant_id || null,
+      quantite_adjuvant_litres: production.quantite_adjuvant_litres || 0
     }
   } else {
     editingProduction.value = null
@@ -431,8 +505,10 @@ const openModal = (production?: LaravelProduction) => {
       lotId: '',
       statut: 'en_attente' as 'en_attente' | 'en_cours' | 'termine' | 'annule',
       articlesProduits: [{ nom: '', quantiteProduite: 0, unite: '' }],
-      quantite_ciment: 0,
-      quantite_adjuvant: 0
+      ciment_id: null,
+      quantite_ciment_sacs: 0,
+      adjuvant_id: null,
+      quantite_adjuvant_litres: 0
     }
   }
   showModal.value = true
@@ -453,6 +529,18 @@ const saveProduction = async () => {
       return
     }
 
+    // Valider que le ciment est sélectionné
+    if (!newProduction.value.ciment_id || !newProduction.value.quantite_ciment_sacs || newProduction.value.quantite_ciment_sacs < 1) {
+      alert('Veuillez sélectionner un ciment et spécifier la quantité en sacs')
+      return
+    }
+
+    // Valider que l'adjuvant est sélectionné
+    if (!newProduction.value.adjuvant_id || !newProduction.value.quantite_adjuvant_litres || newProduction.value.quantite_adjuvant_litres < 1) {
+      alert('Veuillez sélectionner un adjuvant et spécifier la quantité en litres')
+      return
+    }
+
     // Trouver l'article sélectionné pour obtenir son ID
     const selectedArticle = articlesDisponibles.value.find(art => art.nom === newProduction.value.articlesProduits[0].nom)
     if (!selectedArticle) {
@@ -469,12 +557,15 @@ const saveProduction = async () => {
 
     // Mapper les données frontend vers le format backend
     const productionData = {
-      date: productionDate.toISOString().split('T')[0], // Format YYYY-MM-DD
-      statut: newProduction.value.statut,
-      lot_id: newProduction.value.lotId,
-      quantite_ciment: newProduction.value.quantite_ciment || 0,
-      quantite_adjuvant: newProduction.value.quantite_adjuvant || 0,
-      articlesProduits: newProduction.value.articlesProduits
+      product_id: selectedArticle.id,
+      quantity: newProduction.value.articlesProduits[0].quantiteProduite || 1,
+      production_date: productionDate.toISOString().split('T')[0], // Format YYYY-MM-DD
+      status: newProduction.value.statut,
+      notes: newProduction.value.lotId ? `Lot ID: ${newProduction.value.lotId}` : undefined,
+      ciment_id: newProduction.value.ciment_id,
+      quantite_ciment_sacs: newProduction.value.quantite_ciment_sacs,
+      adjuvant_id: newProduction.value.adjuvant_id,
+      quantite_adjuvant_litres: newProduction.value.quantite_adjuvant_litres
     }
 
     console.log('🔍 [ProductionView] Données mappées:', productionData)
@@ -542,11 +633,15 @@ const getStatutText = (statut: string) => {
   return texts[statut as keyof typeof texts] || statut
 }
 
-const formatDate = (date: string) => {
+const formatDate = (date: string | null | undefined) => {
   if (!date) return 'Date non définie'
   const dateObj = new Date(date)
   if (isNaN(dateObj.getTime())) return 'Date invalide'
-  return dateObj.toLocaleDateString('fr-FR')
+  return dateObj.toLocaleDateString('fr-FR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric'
+  })
 }
 
 const formatCurrency = (amount: number) => {
@@ -559,6 +654,8 @@ const formatCurrency = (amount: number) => {
 onMounted(async () => {
   await loadProductions()
   await loadArticlesDisponibles()
+  await loadCimentsDisponibles()
+  await loadAdjuvantsDisponibles()
 })
 </script>
 

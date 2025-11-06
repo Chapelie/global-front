@@ -43,7 +43,7 @@ class LaravelAuthService {
   private apiService = useLaravelApi()
   private api = ApiConfig.getInstance()
   public user = ref<LaravelUser | null>(null)
-  private loading = ref(false)
+  public loading = ref(false)
   private _isInitialized = ref(false)
 
   constructor() {
@@ -148,7 +148,7 @@ class LaravelAuthService {
   }
 
   // Inscription
-  async signUp(userData: RegisterData): Promise<{ success: boolean; error?: string; user?: LaravelUser }> {
+  signUp = async (userData: RegisterData): Promise<{ success: boolean; error?: string; user?: LaravelUser }> => {
     this.loading.value = true
     
     try {
@@ -238,7 +238,7 @@ class LaravelAuthService {
   }
 
   // Réinitialiser le mot de passe
-  async resetPassword(request: PasswordResetRequest): Promise<{ success: boolean; error?: string }> {
+  resetPassword = async (request: PasswordResetRequest): Promise<{ success: boolean; error?: string }> => {
     this.loading.value = true
     
     try {
@@ -270,7 +270,7 @@ class LaravelAuthService {
   }
 
   // Mettre à jour le mot de passe
-  async updatePassword(passwordData: { current_password: string; password: string; password_confirmation: string }): Promise<{ success: boolean; error?: string }> {
+  updatePassword = async (passwordData: { current_password: string; password: string; password_confirmation: string }): Promise<{ success: boolean; error?: string }> => {
     this.loading.value = true
     
     try {
@@ -303,7 +303,7 @@ class LaravelAuthService {
   }
 
   // Mettre à jour le profil
-  async updateProfile(profileData: { name?: string; email?: string }): Promise<{ success: boolean; error?: string; user?: LaravelUser }> {
+  updateProfile = async (profileData: { name?: string; email?: string }): Promise<{ success: boolean; error?: string; user?: LaravelUser }> => {
     this.loading.value = true
     
     try {
@@ -339,7 +339,7 @@ class LaravelAuthService {
   }
 
   // Mettre à jour le rôle utilisateur (admin seulement)
-  async updateUserRole(userId: number, role: string): Promise<{ success: boolean; error?: string }> {
+  updateUserRole = async (userId: number, role: string): Promise<{ success: boolean; error?: string }> => {
     this.loading.value = true
     
     try {
@@ -372,7 +372,7 @@ class LaravelAuthService {
   }
 
   // Créer un profil utilisateur
-  async createUserProfile(userData: Partial<LaravelUser>): Promise<{ success: boolean; error?: string }> {
+  createUserProfile = async (userData: Partial<LaravelUser>): Promise<{ success: boolean; error?: string }> => {
     this.loading.value = true
     
     try {
@@ -405,7 +405,7 @@ class LaravelAuthService {
   }
 
   // Obtenir tous les utilisateurs (admin seulement)
-  async getUsers(): Promise<{ success: boolean; error?: string; users?: LaravelUser[] }> {
+  getUsers = async (): Promise<{ success: boolean; error?: string; users?: LaravelUser[] }> => {
     try {
       const response = await fetch(`${import.meta.env.VITE_LARAVEL_API_BASE_URL || 'http://localhost:8000/api'}/auth/users`, {
         headers: {

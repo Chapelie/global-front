@@ -4,7 +4,7 @@
  */
 
 import { ref, computed } from 'vue'
-import { mapCommandeData, mapLivraisonData, mapProductionData, mapArticleData, mapArrayData } from '../utils/dataMapper'
+import { mapCommandeData, mapLivraisonData, mapProductionData, mapProductionBatchData, mapArticleData, mapArrayData } from '../utils/dataMapper'
 import { ApiConfig, type ApiResponse, type ApiError } from '../config/ApiConfig'
 
 // Types Laravel
@@ -197,9 +197,26 @@ interface LaravelProduction {
   user_id: number
   quantite_ciment?: number
   quantite_adjuvant?: number
-  notes?: string
+  ciment_id?: number | null
+  quantite_ciment_sacs?: number
+  adjuvant_id?: number | null
+  quantite_adjuvant_litres?: number
+  notes?: string | null
   created_at: string
   updated_at: string
+  // Relations
+  ciment?: {
+    id: number
+    nom: string
+    type?: string
+    stock_actuel?: number
+  }
+  adjuvant?: {
+    id: number
+    nom: string
+    type?: string
+    stock_actuel?: number
+  }
   // Propriétés étendues pour compatibilité
   articlesProduits?: Array<{
     nom: string
@@ -227,7 +244,7 @@ interface LaravelDocument {
 }
 
 class LaravelApiService {
-  private api: ApiConfig
+  public api: ApiConfig
   private token = ref<string | null>(null)
 
   constructor() {
@@ -601,13 +618,36 @@ class LaravelApiService {
     }
   }
 
-  // ===== PRODUCTIONS =====
-  getProductions = async (): Promise<LaravelProduction[]> => {
+  // ===== PRODUCTIONS (ProductionBatch) =====
+  getProductions = async (): Promise<any[]> => {
     try {
       const response = await this.api.get('/production/batches')
       console.log('🔍 [LaravelApiService] Réponse productions brute:', response)
-      const mappedData = mapArrayData(response.data || [], mapProductionData)
-      console.log('✅ [LaravelApiService] Productions mappées:', mappedData)
+      
+      // ApiConfig.get() retourne { data: ..., success: true }
+      // Laravel paginate() retourne: { data: [...], current_page, per_page, ... }
+      // ApiConfig extrait data.data dans response.data, donc response.data est déjà le tableau si paginé
+      // Mais vérifions aussi si c'est un objet paginé complet
+      let batches = []
+      const responseData = response.data
+      
+      if (responseData) {
+        if (Array.isArray(responseData)) {
+          // Format tableau direct
+          batches = responseData
+        } else if (responseData.data && Array.isArray(responseData.data)) {
+          // Format paginé Laravel (si ApiConfig n'a pas extrait)
+          batches = responseData.data
+        } else if (typeof responseData === 'object' && !Array.isArray(responseData)) {
+          // Si c'est un objet mais pas un tableau, peut-être un seul item
+          console.warn('⚠️ [LaravelApiService] Format de réponse inattendu:', responseData)
+          batches = []
+        }
+      }
+      
+      // Utiliser le bon mapper pour ProductionBatch
+      const mappedData = mapArrayData(batches, mapProductionBatchData)
+      console.log('✅ [LaravelApiService] ProductionBatches mappées:', mappedData.length, 'batches')
       return mappedData
     } catch (error) {
       console.error('Erreur lors de la récupération des productions:', error)
@@ -615,30 +655,46 @@ class LaravelApiService {
     }
   }
 
-  getProduction = async (id: number): Promise<LaravelProduction | null> => {
+  getProduction = async (id: number): Promise<any | null> => {
     try {
-      const response = await this.api.get<{ data: LaravelProduction }>(`/production/batches/${id}`)
-      return response.data.data || null
+      const response = await this.api.get(`/production/batches/${id}`)
+      // ApiConfig.get() retourne { data: ..., success: true }
+      // response.data est déjà la valeur extraite
+      const batch = response.data || null
+      if (batch) {
+        return mapProductionBatchData(batch)
+      }
+      return null
     } catch (error) {
       console.error(`Erreur lors de la récupération de la production ${id}:`, error)
       return null
     }
   }
 
-  addProduction = async (productionData: Partial<LaravelProduction>): Promise<LaravelProduction | null> => {
+  addProduction = async (productionData: Partial<LaravelProduction>): Promise<any | null> => {
     try {
-      const response = await this.api.post<{ data: LaravelProduction }>('/production/batches', productionData)
-      return response.data.data || null
+      const response = await this.api.post('/production/batches', productionData)
+      // ApiConfig.post() retourne { data: ..., success: true }
+      const batch = response.data || null
+      if (batch) {
+        return mapProductionBatchData(batch)
+      }
+      return null
     } catch (error) {
       console.error('Erreur lors de l\'ajout de la production:', error)
       throw error
     }
   }
 
-  updateProduction = async (id: number, productionData: Partial<LaravelProduction>): Promise<LaravelProduction | null> => {
+  updateProduction = async (id: number, productionData: Partial<LaravelProduction>): Promise<any | null> => {
     try {
-      const response = await this.api.put<{ data: LaravelProduction }>(`/production/batches/${id}`, productionData)
-      return response.data.data || null
+      const response = await this.api.put(`/production/batches/${id}`, productionData)
+      // ApiConfig.put() retourne { data: ..., success: true }
+      const batch = response.data || null
+      if (batch) {
+        return mapProductionBatchData(batch)
+      }
+      return null
     } catch (error) {
       console.error(`Erreur lors de la mise à jour de la production ${id}:`, error)
       throw error
@@ -669,8 +725,13 @@ class LaravelApiService {
   // ===== DOCUMENTS =====
   getDocuments = async (): Promise<LaravelDocument[]> => {
     try {
-      const response = await this.api.get<{ data: LaravelDocument[] }>('/documents')
-      return response.data.data || []
+      const response = await this.api.get<{ success: boolean; data: LaravelDocument[] }>('/documents')
+      // L'API retourne { success: true, data: [...] }
+      if (response.data.success && response.data.data) {
+        return response.data.data
+      }
+      // Fallback si la structure est différente
+      return Array.isArray(response.data) ? response.data : []
     } catch (error) {
       console.error('Erreur lors de la récupération des documents:', error)
       return []
@@ -814,13 +875,21 @@ class LaravelApiService {
   }
 
   getProductionsDuJour = async (): Promise<LaravelProduction[]> => {
+    const today = new Date().toISOString().split('T')[0]
     try {
-      const today = new Date().toISOString().split('T')[0]
-      const response = await this.api.get<{ data: LaravelProduction[] }>(`/productions?date=${today}`)
+      // Utiliser la route correcte pour les productions
+      const response = await this.api.get<{ data: LaravelProduction[] }>(`/production/batches?date=${today}`)
       return response.data.data || []
     } catch (error) {
       console.error('Erreur lors de la récupération des productions du jour:', error)
-      return []
+      // Fallback sur storage/productions si disponible
+      try {
+        const response = await this.api.get<LaravelProduction[]>(`/storage/productions?date=${today}`)
+        return Array.isArray(response.data) ? response.data : []
+      } catch (fallbackError) {
+        console.error('Erreur lors du fallback:', fallbackError)
+        return []
+      }
     }
   }
 
@@ -1060,8 +1129,13 @@ class LaravelApiService {
   // ===== UTILISATEURS =====
   getUsers = async (): Promise<LaravelUser[]> => {
     try {
-      const response = await this.api.get<LaravelUser[]>('/users')
-      return response.data || []
+      const response = await this.api.get<{ success: boolean; data: LaravelUser[] }>('/users')
+      // L'API retourne { success: true, data: [...] }
+      if (response.data.success && response.data.data) {
+        return response.data.data
+      }
+      // Fallback si la structure est différente
+      return Array.isArray(response.data) ? response.data : []
     } catch (error) {
       console.error('Erreur lors de la récupération des utilisateurs:', error)
       return []
@@ -1080,10 +1154,16 @@ class LaravelApiService {
 
   addUser = async (data: Partial<LaravelUser>): Promise<LaravelUser | null> => {
     try {
-      const response = await this.api.post<LaravelUser>('/users', data)
-      return response.data || null
-    } catch (error) {
+      const response = await this.api.post<{ success: boolean; data: LaravelUser; message?: string }>('/users', data)
+      // L'API retourne { success: true, data: {...}, message: "..." }
+      if (response.data.success && response.data.data) {
+        return response.data.data
+      }
+      // Fallback si la structure est différente
+      return response.data as any
+    } catch (error: any) {
       console.error('Erreur lors de l\'ajout de l\'utilisateur:', error)
+      // Ré-throw pour que le composant puisse gérer l'erreur
       throw error
     }
   }
@@ -1111,10 +1191,17 @@ class LaravelApiService {
   // ===== RÔLES =====
   getRoles = async (): Promise<any[]> => {
     try {
-      const response = await this.api.get<any[]>('/roles')
-      return response.data || []
+      // Utiliser la route correcte pour les rôles
+      const response = await this.api.get<{ success: boolean; data: any[] }>('/users/roles')
+      // L'API retourne { success: true, data: [...] }
+      if (response.data.success && response.data.data) {
+        return response.data.data
+      }
+      // Fallback si la structure est différente
+      return Array.isArray(response.data) ? response.data : []
     } catch (error) {
       console.error('Erreur lors de la récupération des rôles:', error)
+      // Retourner une liste vide plutôt que de faire planter l'application
       return []
     }
   }

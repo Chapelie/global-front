@@ -24,7 +24,9 @@ import {
 // Types
 interface User {
   id?: number
-  name: string
+  name?: string
+  first_name?: string
+  last_name?: string
   email: string
   phone?: string
   role: string
@@ -63,7 +65,8 @@ const activeTab = ref<'users' | 'roles'>('users')
 
 // Nouvel utilisateur
 const newUser = ref<User>({
-  name: '',
+  first_name: '',
+  last_name: '',
   email: '',
   phone: '',
   role: 'operator',
@@ -178,16 +181,29 @@ const loadUsers = async () => {
     isLoading.value = true
     const laravelUsers = await getUsers()
     // Convertir LaravelUser[] en User[]
-    users.value = laravelUsers.map(user => ({
-      id: user.id,
-      name: user.name,
-      email: user.email,
-      phone: user.phone,
-      role: user.role || 'user',
-      password: '',
-      password_confirmation: '',
-      actif: user.actif !== false
-    }))
+    users.value = laravelUsers.map(user => {
+      // Séparer name en first_name et last_name si nécessaire
+      let firstName = user.first_name || ''
+      let lastName = user.last_name || ''
+      if (!firstName && !lastName && user.name) {
+        const nameParts = user.name.split(' ', 2)
+        firstName = nameParts[0] || ''
+        lastName = nameParts[1] || ''
+      }
+      
+      return {
+        id: user.id,
+        name: user.name,
+        first_name: firstName,
+        last_name: lastName,
+        email: user.email,
+        phone: user.phone,
+        role: user.roles?.[0]?.name || user.role || 'user',
+        password: '',
+        password_confirmation: '',
+        actif: user.actif !== false
+      }
+    })
   } catch (error) {
     console.error('Erreur lors du chargement des utilisateurs:', error)
     alert('Erreur lors du chargement des utilisateurs')
@@ -208,15 +224,37 @@ const loadRoles = async () => {
 
 // Gestion des modals utilisateurs
 const openUserModal = (user?: User) => {
+  console.log('🔵 [PersonnelView] openUserModal appelé avec:', user ? 'user' : 'nouveau')
   if (user) {
-    editingUser.value = { ...user }
+    // S'assurer que first_name et last_name sont présents
+    editingUser.value = {
+      ...user,
+      first_name: user.first_name || '',
+      last_name: user.last_name || '',
+      password: '',
+      password_confirmation: '',
+      actif: user.actif !== false
+    }
     isEditingUser.value = true
   } else {
-    editingUser.value = { ...newUser.value }
+    editingUser.value = { 
+      ...newUser.value,
+      first_name: '',
+      last_name: '',
+      email: '',
+      phone: '',
+      role: 'operator',
+      password: '',
+      password_confirmation: '',
+      actif: true
+    }
     isEditingUser.value = false
   }
+  console.log('🔵 [PersonnelView] editingUser initialisé:', editingUser.value)
+  console.log('🔵 [PersonnelView] showUserModal sera:', true)
   showUserModal.value = true
   showPassword.value = false
+  console.log('🔵 [PersonnelView] showUserModal est maintenant:', showUserModal.value)
 }
 
 const closeUserModal = () => {
@@ -245,24 +283,73 @@ const closeRoleModal = () => {
 
 // CRUD Utilisateurs
 const saveUser = async () => {
-  if (!editingUser.value) return
+  if (!editingUser.value) {
+    console.error('❌ [PersonnelView] editingUser est null')
+    return
+  }
 
   try {
+    // Préparer les données pour l'API
+    const userData: any = {
+      first_name: editingUser.value.first_name || '',
+      last_name: editingUser.value.last_name || '',
+      email: editingUser.value.email,
+      phone: editingUser.value.phone || null,
+      role: editingUser.value.role,
+    }
+    
+    // Ajouter le mot de passe seulement pour la création (OBLIGATOIRE pour création)
+    if (!isEditingUser.value) {
+      if (!editingUser.value.password || editingUser.value.password.length < 8) {
+        alert('Le mot de passe est requis et doit contenir au moins 8 caractères')
+        return
+      }
+      if (editingUser.value.password !== editingUser.value.password_confirmation) {
+        alert('Les mots de passe ne correspondent pas')
+        return
+      }
+      userData.password = editingUser.value.password
+    }
+    
+    console.log('📤 [PersonnelView] Envoi des données:', { 
+      isEditing: isEditingUser.value, 
+      userData: { ...userData, password: userData.password ? '***' : undefined } 
+    })
+    
     if (isEditingUser.value) {
-      await updateUser(editingUser.value.id!, editingUser.value)
+      await updateUser(editingUser.value.id!, userData)
+      console.log('✅ [PersonnelView] Utilisateur mis à jour')
     } else {
-      await addUser(editingUser.value)
+      const result = await addUser(userData)
+      console.log('✅ [PersonnelView] Utilisateur créé:', result)
     }
     await loadUsers()
     closeUserModal()
-  } catch (error) {
-    console.error('Erreur lors de la sauvegarde de l\'utilisateur:', error)
-    alert('Erreur lors de la sauvegarde de l\'utilisateur')
+    alert(isEditingUser.value ? 'Utilisateur mis à jour avec succès' : 'Utilisateur créé avec succès')
+  } catch (error: any) {
+    console.error('❌ [PersonnelView] Erreur lors de la sauvegarde:', error)
+    const errorMessage = error?.response?.data?.error || 
+                        error?.response?.data?.message || 
+                        error?.message || 
+                        'Erreur lors de la sauvegarde de l\'utilisateur'
+    
+    // Afficher les erreurs de validation si disponibles
+    if (error?.response?.data?.errors) {
+      const errors = Object.entries(error.response.data.errors)
+        .map(([field, messages]: [string, any]) => `${field}: ${Array.isArray(messages) ? messages.join(', ') : messages}`)
+        .join('\n')
+      alert(`Erreurs de validation:\n${errors}`)
+    } else {
+      alert(errorMessage)
+    }
   }
 }
 
 const deleteUserAction = async (user: User) => {
-  if (!confirm(`Êtes-vous sûr de vouloir supprimer l'utilisateur ${user.name} ?`)) return
+  const userName = (user.first_name && user.last_name) 
+    ? `${user.first_name} ${user.last_name}` 
+    : (user.name || 'cet utilisateur')
+  if (!confirm(`Êtes-vous sûr de vouloir supprimer l'utilisateur ${userName} ?`)) return
 
   try {
     await deleteUser(user.id!)
@@ -485,11 +572,13 @@ const copyToClipboard = (text: string) => {
                     <div class="flex items-center">
                       <div class="h-10 w-10 rounded-full bg-gradient-to-r from-orange-500 to-orange-600 flex items-center justify-center shadow-lg mr-4">
                         <span class="text-sm font-bold text-white">
-                          {{ (user.name || '?').charAt(0) }}
+                          {{ ((user.first_name || user.name || '?').charAt(0)).toUpperCase() }}
                         </span>
             </div>
                       <div>
-                        <div class="text-sm font-medium text-gray-900">{{ user.name || 'Nom non défini' }}</div>
+                        <div class="text-sm font-medium text-gray-900">
+                          {{ (user.first_name && user.last_name) ? `${user.first_name} ${user.last_name}` : (user.name || 'Nom non défini') }}
+                        </div>
           </div>
                     </div>
                   </td>
@@ -652,163 +741,183 @@ const copyToClipboard = (text: string) => {
 
     <!-- Modal Utilisateur -->
     <div
-      v-if="showUserModal"
-      class="fixed inset-0 z-50 overflow-y-auto mobile-modal-container"
+      v-if="showUserModal && editingUser"
+      class="fixed inset-0"
+      style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 9999; display: flex; align-items: center; justify-content: center;"
       @click.self="closeUserModal"
     >
-      <div class="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
-        <div class="fixed inset-0 transition-opacity bg-gray-500 bg-opacity-75" @click="closeUserModal"></div>
-
-        <div class="modal-container inline-block align-bottom bg-white rounded-xl text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
-          <!-- Header -->
-          <div class="modal-header-content bg-gradient-to-r from-orange-500 to-orange-600 px-6 py-4">
-            <div class="flex items-center justify-between">
-              <div>
-                <h3 class="modal-title text-lg font-semibold text-white">
-                  {{ isEditingUser ? 'Modifier l\'utilisateur' : 'Nouvel utilisateur' }}
-                </h3>
-                <p class="modal-subtitle text-sm text-orange-100">
-                  {{ isEditingUser ? 'Modifiez les informations' : 'Renseignez les informations' }}
-                </p>
-              </div>
-              <button
-                @click="closeUserModal"
-                class="text-orange-200 hover:text-white transition-colors"
-              >
-                <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-            </div>
-
-          <!-- Contenu -->
-          <div class="modal-body-content px-6 py-6 max-h-96 overflow-y-auto">
-            <form @submit.prevent="saveUser" class="space-y-4">
-              <!-- Nom -->
-              <div>
-                <label class="block text-sm font-medium text-gray-700 mb-2">Nom complet *</label>
-              <input
-                  v-model="editingUser!.name"
-                type="text"
-                required
-                  class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-              />
-          </div>
-
-              <!-- Email -->
-              <div>
-                <label class="block text-sm font-medium text-gray-700 mb-2">Email *</label>
-            <input
-                  v-model="editingUser!.email"
-              type="email"
-              required
-                  class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-            />
-          </div>
-
-              <!-- Téléphone -->
-              <div>
-                <label class="block text-sm font-medium text-gray-700 mb-2">Téléphone</label>
-            <input
-                  v-model="editingUser!.phone"
-                type="tel"
-                  class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-            />
-          </div>
-
-              <!-- Rôle -->
-              <div>
-                <label class="block text-sm font-medium text-gray-700 mb-2">Rôle *</label>
-                <select
-                  v-model="editingUser!.role"
-                  required
-                  class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+      <!-- Overlay -->
+      <div 
+        class="absolute inset-0 bg-black"
+        style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; background-color: rgba(0, 0, 0, 0.5); z-index: 1;"
+        @click="closeUserModal"
+      ></div>
+      
+      <!-- Modal Content -->
+      <div 
+        class="relative bg-white rounded-xl shadow-xl w-full max-w-lg mx-4"
+        style="position: relative; z-index: 10; background: white; max-width: 32rem; margin: 0 auto; max-height: 90vh; overflow-y: auto;"
+        @click.stop
+      >
+        <!-- Header -->
+        <div class="modal-header-content bg-gradient-to-r from-orange-500 to-orange-600 px-6 py-4">
+              <div class="flex items-center justify-between">
+                <div>
+                  <h3 class="modal-title text-lg font-semibold text-white">
+                    {{ isEditingUser ? 'Modifier l\'utilisateur' : 'Nouvel utilisateur' }}
+                  </h3>
+                  <p class="modal-subtitle text-sm text-orange-100">
+                    {{ isEditingUser ? 'Modifiez les informations' : 'Renseignez les informations' }}
+                  </p>
+                </div>
+                <button
+                  @click="closeUserModal"
+                  class="text-orange-200 hover:text-white transition-colors"
                 >
-                  <option
-                    v-for="role in predefinedRoles"
-                    :key="role.name"
-                    :value="role.name"
-                  >
-                    {{ role.display_name }}
-                  </option>
-              </select>
+                  <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
             </div>
 
-              <!-- Mot de passe (seulement pour nouveau utilisateur) -->
-              <div v-if="!isEditingUser">
-                <label class="block text-sm font-medium text-gray-700 mb-2">Mot de passe *</label>
-                <div class="relative">
-              <input
-                    v-model="editingUser!.password"
-                    :type="showPassword ? 'text' : 'password'"
+            <!-- Contenu -->
+            <div class="modal-body-content px-6 py-6 max-h-96 overflow-y-auto">
+              <form @submit.prevent="saveUser" class="space-y-4">
+                <!-- Prénom -->
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-2">Prénom *</label>
+                  <input
+                    v-model="editingUser.first_name"
+                    type="text"
                     required
-                    class="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                    class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
                   />
+                </div>
+
+                <!-- Nom -->
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-2">Nom *</label>
+                  <input
+                    v-model="editingUser.last_name"
+                    type="text"
+                    required
+                    class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                  />
+                </div>
+
+                <!-- Email -->
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-2">Email *</label>
+                  <input
+                    v-model="editingUser.email"
+                    type="email"
+                    required
+                    class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                  />
+                </div>
+
+                <!-- Téléphone -->
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-2">Téléphone</label>
+                  <input
+                    v-model="editingUser.phone"
+                    type="tel"
+                    class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                  />
+                </div>
+
+                <!-- Rôle -->
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-2">Rôle *</label>
+                  <select
+                    v-model="editingUser.role"
+                    required
+                    class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                  >
+                    <option
+                      v-for="role in predefinedRoles"
+                      :key="role.name"
+                      :value="role.name"
+                    >
+                      {{ role.display_name }}
+                    </option>
+                  </select>
+                </div>
+
+                <!-- Mot de passe (seulement pour nouveau utilisateur) -->
+                <div v-if="!isEditingUser">
+                  <label class="block text-sm font-medium text-gray-700 mb-2">Mot de passe *</label>
+                  <div class="relative">
+                    <input
+                      v-model="editingUser.password"
+                      :type="showPassword ? 'text' : 'password'"
+                      required
+                      class="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                    />
+                    <button
+                      type="button"
+                      @click="togglePasswordVisibility"
+                      class="absolute inset-y-0 right-0 pr-3 flex items-center"
+                    >
+                      <component
+                        :is="showPassword ? EyeSlashIcon : EyeIcon"
+                        class="h-5 w-5 text-gray-400"
+                      />
+                    </button>
+                  </div>
                   <button
                     type="button"
-                    @click="togglePasswordVisibility"
-                    class="absolute inset-y-0 right-0 pr-3 flex items-center"
+                    @click="generatePassword"
+                    class="mt-2 text-sm text-orange-600 hover:text-orange-800 flex items-center"
                   >
-                    <component
-                      :is="showPassword ? EyeSlashIcon : EyeIcon"
-                      class="h-5 w-5 text-gray-400"
-                    />
+                    <KeyIcon class="h-4 w-4 mr-1" />
+                    Générer un mot de passe
                   </button>
+                </div>
+
+                <!-- Confirmation mot de passe -->
+                <div v-if="!isEditingUser">
+                  <label class="block text-sm font-medium text-gray-700 mb-2">Confirmer le mot de passe *</label>
+                  <input
+                    v-model="editingUser.password_confirmation"
+                    type="password"
+                    required
+                    class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                  />
+                </div>
+
+                <!-- Statut -->
+                <div class="flex items-center">
+                  <input
+                    v-model="editingUser.actif"
+                    type="checkbox"
+                    class="h-4 w-4 text-orange-600 focus:ring-orange-500 border-gray-300 rounded"
+                  />
+                  <label class="ml-2 block text-sm text-gray-900">
+                    Utilisateur actif
+                  </label>
+                </div>
+              </form>
             </div>
-                <button
-                  type="button"
-                  @click="generatePassword"
-                  class="mt-2 text-sm text-orange-600 hover:text-orange-800 flex items-center"
-                >
-                  <KeyIcon class="h-4 w-4 mr-1" />
-                  Générer un mot de passe
-                </button>
-          </div>
 
-              <!-- Confirmation mot de passe -->
-              <div v-if="!isEditingUser">
-                <label class="block text-sm font-medium text-gray-700 mb-2">Confirmer le mot de passe *</label>
-                <input
-                  v-model="editingUser!.password_confirmation"
-                  type="password"
-                  required
-                  class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-                />
-              </div>
-
-              <!-- Statut -->
-              <div class="flex items-center">
-                <input
-                  v-model="editingUser!.actif"
-                  type="checkbox"
-                  class="h-4 w-4 text-orange-600 focus:ring-orange-500 border-gray-300 rounded"
-                />
-                <label class="ml-2 block text-sm text-gray-900">
-                  Utilisateur actif
-              </label>
-            </div>
-            </form>
-          </div>
-
-          <!-- Footer -->
-          <div class="modal-footer-content bg-gray-50 px-6 py-4 flex justify-end space-x-3">
-            <button
-              @click="closeUserModal"
-              class="btn-cancel px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500"
-            >
-              Annuler
-            </button>
-            <button
-              @click="saveUser"
-              class="btn-submit px-4 py-2 text-sm font-medium text-white bg-gradient-to-r from-orange-500 to-orange-600 rounded-lg hover:from-orange-600 hover:to-orange-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500"
-            >
-              {{ isEditingUser ? 'Modifier' : 'Créer' }}
-            </button>
-          </div>
+            <!-- Footer -->
+            <div class="modal-footer-content bg-gray-50 px-6 py-4 flex justify-end space-x-3">
+              <button
+                @click="closeUserModal"
+                class="btn-cancel px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500"
+              >
+                Annuler
+              </button>
+              <button
+                @click="saveUser"
+                class="btn-submit px-4 py-2 text-sm font-medium text-white bg-gradient-to-r from-orange-500 to-orange-600 rounded-lg hover:from-orange-600 hover:to-orange-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500"
+              >
+                {{ isEditingUser ? 'Modifier' : 'Créer' }}
+              </button>
+        </div>
       </div>
     </div>
-  </div>
 
     <!-- Modal Rôle -->
     <div

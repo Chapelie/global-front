@@ -60,6 +60,75 @@ export function mapProductionData(production: any): any {
   }
 }
 
+/**
+ * Mapper pour ProductionBatch (lots de production)
+ * Différent de Production (sessions de production)
+ */
+export function mapProductionBatchData(batch: any): any {
+  // Extraire l'article produit
+  const article = batch.product || batch.article || null
+  
+  // Construire les articles produits
+  const articlesProduits = article ? [{
+    nom: article.nom || article.name || '',
+    quantiteProduite: batch.quantity || 0,
+    unite: article.unite || article.unit || 'pièces'
+  }] : []
+  
+  // Formater la date de production
+  const productionDate = batch.production_date || batch.productionDate || batch.production_date_formatted
+  let formattedDate = null
+  if (productionDate) {
+    if (typeof productionDate === 'string') {
+      formattedDate = productionDate.split('T')[0]
+    } else if (productionDate instanceof Date) {
+      formattedDate = productionDate.toISOString().split('T')[0]
+    } else {
+      formattedDate = productionDate
+    }
+  }
+  
+  return {
+    ...batch,
+    // Champs de base
+    articleId: batch.article_id || batch.articleId,
+    batchNumber: batch.batch_number || batch.batchNumber,
+    productionDate: productionDate,
+    dryingStartDate: batch.drying_start_date || batch.dryingStartDate,
+    readyDate: batch.ready_date || batch.readyDate,
+    dryingDaysRemaining: batch.drying_days_remaining ?? batch.dryingDaysRemaining ?? 0,
+    createdBy: batch.created_by || batch.createdBy,
+    createdAt: batch.created_at || batch.createdAt,
+    updatedAt: batch.updated_at || batch.updatedAt,
+    
+    // Relations
+    product: article,
+    article: article,
+    creator: batch.creator || null,
+    
+    // Champs calculés (pour compatibilité avec le frontend)
+    lotId: batch.batch_number || batch.lotId, // Utiliser batch_number comme lotId
+    userId: batch.created_by || batch.userId,
+    date: formattedDate, // Pour le frontend
+    statut: batch.status || 'en_attente', // Mapper status vers statut
+    articlesProduits: articlesProduits, // Articles produits avec quantités
+    quantite_ciment: batch.quantite_ciment || 0, // Pourrait être dans les relations
+    quantite_adjuvant: batch.quantite_adjuvant || 0, // Pourrait être dans les relations
+    
+    // Garder les champs originaux pour compatibilité
+    article_id: batch.article_id,
+    batch_number: batch.batch_number,
+    production_date: productionDate,
+    drying_start_date: batch.drying_start_date,
+    ready_date: batch.ready_date,
+    drying_days_remaining: batch.drying_days_remaining,
+    created_by: batch.created_by,
+    created_at: batch.created_at,
+    updated_at: batch.updated_at,
+    status: batch.status
+  }
+}
+
 export function mapArticleData(article: any): any {
   return {
     ...article,
@@ -80,6 +149,7 @@ export function mapArticleData(article: any): any {
 export function mapArrayData<T>(data: any[], mapper: (item: any) => T): T[] {
   return data.map(mapper)
 }
+
 
 
 

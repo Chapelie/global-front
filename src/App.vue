@@ -2,6 +2,7 @@
 import { ref, computed } from 'vue'
 import { RouterView, useRoute, useRouter } from 'vue-router'
 import { useAuth } from '@/services/auth'
+import { useRoles } from '@/services/roles'
 import { useLogo } from './composables/useLogo'
 import { useAlert } from './composables/useAlert'
 import ProductionReminder from './components/ProductionReminder.vue'
@@ -32,21 +33,32 @@ const { alertState, confirm, cancel, close } = useAlert()
 const authPages = ['/login', '/register']
 const isAuthPage = computed(() => authPages.includes(route.path))
 
-const navigation = [
-  { name: 'Dashboard', href: '/', icon: HomeIcon },
-  { name: 'Commandes', href: '/commandes', icon: ShoppingCartIcon },
-  { name: 'Production', href: '/production', icon: CubeIcon },
-  { name: 'Livraison', href: '/livraison', icon: TruckIcon },
-  { name: 'Stock', href: '/stock', icon: ArchiveBoxIcon },
-  { name: 'Matériaux', href: '/materiaux', icon: TagIcon },
-  { name: 'Documents', href: '/documents', icon: DocumentTextIcon },
-  { name: 'Personnel', href: '/personnel', icon: UsersIcon },
-  { name: 'Analyses', href: '/analyses', icon: ChartBarIcon },
-  { name: 'Paramètres', href: '/parametres', icon: Cog6ToothIcon },
+const { permissions } = useRoles()
+
+// Navigation avec permissions basées sur les rôles
+const navigationItems = [
+  { name: 'Dashboard', href: '/', icon: HomeIcon, permission: null },
+  { name: 'Commandes', href: '/commandes', icon: ShoppingCartIcon, permission: 'canViewCommandes' },
+  { name: 'Production', href: '/production', icon: CubeIcon, permission: 'canViewProduction' },
+  { name: 'Livraison', href: '/livraison', icon: TruckIcon, permission: 'canViewLivraisons' },
+  { name: 'Stock', href: '/stock', icon: ArchiveBoxIcon, permission: 'canViewStock' },
+  { name: 'Matériaux', href: '/materiaux', icon: TagIcon, permission: 'canViewStock' },
+  { name: 'Documents', href: '/documents', icon: DocumentTextIcon, permission: 'canViewLivraisons' },
+  { name: 'Personnel', href: '/personnel', icon: UsersIcon, permission: 'canViewPersonnel' },
+  { name: 'Analyses', href: '/analyses', icon: ChartBarIcon, permission: 'canViewAnalyses' },
+  { name: 'Paramètres', href: '/parametres', icon: Cog6ToothIcon, permission: 'canViewParametres' },
 ]
 
+// Filtrer la navigation selon les permissions
+const navigation = computed(() => {
+  return navigationItems.filter(item => {
+    if (!item.permission) return true // Dashboard toujours visible
+    return permissions.value[item.permission as keyof typeof permissions.value] === true
+  })
+})
+
 const currentPage = computed(() => {
-  return navigation.find(item => item.href === route.path)?.name || 'Dashboard'
+  return navigation.value.find(item => item.href === route.path)?.name || 'Dashboard'
 })
 
 const { currentUser } = useAuth()
