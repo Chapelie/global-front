@@ -2,6 +2,7 @@
 import { ref, computed, onMounted, nextTick } from 'vue'
 import { useLaravelApi, type LaravelLivraison, type LaravelArticle } from '../services/laravelApiService'
 import { useAlert } from '../composables/useAlert'
+import { useRoles } from '../services/roles'
 
 // Type étendu pour la livraison avec les propriétés supplémentaires utilisées dans la vue
 interface ExtendedLivraison extends LaravelLivraison {
@@ -29,6 +30,9 @@ const {
 
 // Service d'alerte
 const { success, error, warning, info, confirmDialog } = useAlert()
+
+// Permissions
+const { canDeleteLivraisons } = useRoles()
 
 // État réactif
 const livraisons = ref<ExtendedLivraison[]>([])

@@ -15,10 +15,14 @@ import {
   CurrencyDollarIcon
 } from '@heroicons/vue/24/outline'
 import { useLaravelApi, type LaravelArticle } from '../services/laravelApiService'
+import { useRoles } from '../services/roles'
 // import SyncStatus from '../components/SyncStatus.vue'
 
 const articles = ref<LaravelArticle[]>([])
 const { getArticles, addArticle, updateArticle, deleteArticle,  } = useLaravelApi()
+
+// Permissions
+const { canDeleteStock } = useRoles()
 
 const showModal = ref(false)
 const editingArticle = ref<LaravelArticle | null>(null)
@@ -415,6 +419,7 @@ onMounted(async () => {
                 <PencilIcon class="h-5 w-5" />
               </button>
               <button
+                v-if="canDeleteStock"
                 @click="deleteArticle(article.id)"
                 class="h-10 w-10 rounded-xl bg-gray-100 hover:bg-red-100 text-gray-600 hover:text-red-600 flex items-center justify-center transition-all duration-200 hover:scale-110"
                 title="Supprimer"

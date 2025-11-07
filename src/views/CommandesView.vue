@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
+import { useRoles } from '../services/roles'
 import { useLaravelApi, type LaravelCommande, type LaravelArticle } from '../services/laravelApiService'
 import { useApiConfig } from '../config/ApiConfig'
 import type { CompleteCommande } from '../types/global'
@@ -22,6 +23,10 @@ import {
 
 const { getCommandes, addCommande, updateCommande, deleteCommande, getArticles, addLivraison } = useLaravelApi()
 const apiConfig = useApiConfig()
+
+// Permissions
+const { canDeleteCommandes } = useRoles()
+
 const commandes = ref<LaravelCommande[]>([])
 const showModal = ref(false)
 const editingCommande = ref<LaravelCommande | null>(null)
@@ -739,6 +744,7 @@ const commandesLivrees = computed(() => 0)
                 Modifier
               </button>
               <button
+                v-if="canDeleteCommandes"
                 @click="handleDeleteCommande(commande.id!)"
                 class="action-btn action-btn-danger"
               >

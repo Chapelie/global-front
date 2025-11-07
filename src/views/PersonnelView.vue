@@ -2,6 +2,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useLaravelApi } from '../services/laravelApiService'
 import { useLaravelAuth } from '../services/laravelAuth'
+import { useRoles } from '../services/roles'
 import {
   PlusIcon,
   PencilIcon,
@@ -49,6 +50,9 @@ interface Role {
 // Services
 const { getUsers, addUser, updateUser, deleteUser, getRoles, createRole, updateRole, deleteRole } = useLaravelApi()
 const { currentUser } = useLaravelAuth()
+
+// Permissions
+const { canDeletePersonnel } = useRoles()
 
 // État réactif
 const users = ref<User[]>([])
@@ -624,6 +628,7 @@ const copyToClipboard = (text: string) => {
                         <PencilIcon class="h-4 w-4" />
                       </button>
                       <button
+                        v-if="canDeletePersonnel"
                         @click="deleteUserAction(user)"
                         class="text-red-600 hover:text-red-900 transition-colors"
                       >

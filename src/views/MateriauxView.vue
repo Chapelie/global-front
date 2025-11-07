@@ -2,6 +2,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useLaravelApi } from '../services/laravelApiService'
 import { useAlert } from '../composables/useAlert'
+import { useRoles } from '../services/roles'
 import {
   PlusIcon,
   PencilIcon,
@@ -68,6 +69,9 @@ interface Adjuvant {
 
 const { getCiments, addCiment, updateCiment, deleteCiment, getAdjuvants, addAdjuvant, updateAdjuvant, deleteAdjuvant } = useLaravelApi()
 const { success, error, warning, info, confirmDialog } = useAlert()
+
+// Permissions
+const { canDeleteStock } = useRoles()
 
 // État réactif
 const activeTab = ref<'ciments' | 'adjuvants'>('ciments')
@@ -555,6 +559,7 @@ const formatDate = (dateString: string) => {
                   <PencilIcon class="h-4 w-4" />
                 </button>
                 <button
+                  v-if="canDeleteStock"
                   @click="deleteItem(ciment)"
                   class="p-2 text-gray-400 hover:text-red-500 transition-colors"
                 >
@@ -625,6 +630,7 @@ const formatDate = (dateString: string) => {
                   <PencilIcon class="h-4 w-4" />
                 </button>
                 <button
+                  v-if="canDeleteStock"
                   @click="deleteItem(adjuvant)"
                   class="p-2 text-gray-400 hover:text-red-500 transition-colors"
                 >

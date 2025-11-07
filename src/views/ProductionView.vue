@@ -159,6 +159,7 @@
             Modifier
           </button>
           <button 
+            v-if="canDeleteProduction"
             @click="handleDeleteProduction(production.id)" 
             class="px-4 py-2 rounded-lg font-medium transition-colors duration-200 flex items-center bg-red-600 text-white hover:bg-red-700"
           >
@@ -340,9 +341,13 @@ import {
   BeakerIcon
 } from '@heroicons/vue/24/outline'
 import { useLaravelApi, type LaravelProduction } from '../services/laravelApiService'
+import { useRoles } from '../services/roles'
 
 const api = useLaravelApi()
 const { getProductions, addProduction, updateProduction, deleteProduction, getArticles, getCiments, getAdjuvants } = api
+
+// Permissions
+const { canDeleteProduction } = useRoles()
 
 const productions = ref<LaravelProduction[]>([])
 const articlesDisponibles = ref<any[]>([])
