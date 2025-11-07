@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useLaravelApi } from '@/services/laravelApiService'
+import { useRoles } from '@/services/roles'
 
 // Service Laravel
 const {
@@ -38,6 +39,9 @@ const laravelData = ref({
 
 const loading = ref(false)
 const error = ref<string | null>(null)
+
+// Permissions basées sur les rôles
+const { permissions } = useRoles()
 
 // Fonction pour charger les données Laravel
 const loadLaravelData = async () => {
@@ -776,19 +780,19 @@ onMounted(() => {
         </div>
       </div>
       <div class="actions-grid">
-        <router-link to="/production" class="action-item action-orange">
+        <router-link v-if="permissions.canEditProduction" to="/production" class="action-item action-orange">
           <CubeIcon class="action-icon" />
           <span class="action-label">Nouvelle production</span>
         </router-link>
-        <router-link to="/livraison" class="action-item action-green">
+        <router-link v-if="permissions.canViewLivraisons" to="/livraison" class="action-item action-green">
           <TruckIcon class="action-icon" />
           <span class="action-label">Gérer livraisons</span>
         </router-link>
-        <router-link to="/stock" class="action-item action-blue">
+        <router-link v-if="permissions.canViewStock" to="/stock" class="action-item action-blue">
           <ArchiveBoxIcon class="action-icon" />
           <span class="action-label">Gérer le stock</span>
         </router-link>
-        <router-link to="/commandes" class="action-item action-purple">
+        <router-link v-if="permissions.canEditCommandes" to="/commandes" class="action-item action-purple">
           <ShoppingCartIcon class="action-icon" />
           <span class="action-label">Nouvelle commande</span>
         </router-link>

@@ -102,7 +102,7 @@ const newCiment = ref<Ciment>({
   type: 'ciment', // Valeur par défaut
   marque: '', // Pas requis mais gardé pour compatibilité
   prix_unitaire: 0, // Pas requis mais gardé pour compatibilité
-  unite: 'sac',
+  unite: 'sacs',
   stock_actuel: 0,
   seuil_critique: 100,
   actif: true
@@ -116,7 +116,7 @@ const newAdjuvant = ref<Adjuvant>({
   fonction: '',
   dosage_recommandee: 0,
   prix_unitaire: 0,
-  unite: 'kg',
+  unite: 'litres',
   stock_actuel: 0,
   seuil_critique: 50,
   fournisseur: '',
@@ -872,10 +872,17 @@ const formatDate = (dateString: string) => {
                   required
                   class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
                 >
-                  <option value="kg">kg</option>
-                  <option value="tonne">tonne</option>
-                  <option value="L">L</option>
-                  <option value="m³">m³</option>
+                  <!-- Unités pour ciment -->
+                  <template v-if="activeTab === 'ciments'">
+                    <option value="sacs">sacs</option>
+                    <option value="kg">kg</option>
+                    <option value="tonne">tonne</option>
+                  </template>
+                  <!-- Unités pour adjuvant -->
+                  <template v-else>
+                    <option value="litres">litres</option>
+                    <option value="L">L</option>
+                  </template>
                 </select>
               </div>
 

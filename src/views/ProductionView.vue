@@ -217,7 +217,7 @@
                   :key="ciment.id" 
                   :value="ciment.id"
                 >
-                  {{ ciment.nom }} (Stock: {{ ciment.stock_actuel }} sacs)
+                  {{ ciment.nom }} (Stock: {{ ciment.stock_actuel }} {{ ciment.unite || 'sacs' }})
                 </option>
               </select>
               <div v-if="newProduction.ciment_id" class="mt-2">
@@ -245,7 +245,7 @@
                   :key="adjuvant.id" 
                   :value="adjuvant.id"
                 >
-                  {{ adjuvant.nom }} (Stock: {{ adjuvant.stock_actuel }} litres)
+                  {{ adjuvant.nom }} (Stock: {{ adjuvant.stock_actuel }} {{ adjuvant.unite || 'litres' }})
                 </option>
               </select>
               <div v-if="newProduction.adjuvant_id" class="mt-2">

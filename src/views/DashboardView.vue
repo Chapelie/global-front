@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useLaravelApi } from '../services/laravelApiService'
+import { useRoles } from '../services/roles'
 import {
   ChartBarIcon,
   TruckIcon,
@@ -28,6 +29,9 @@ const {
   getProductionStats,
   getDeliveryStats
 } = useLaravelApi()
+
+// Permissions basées sur les rôles
+const { permissions } = useRoles()
 
 // État réactif
 const isLoading = ref(false)
@@ -234,7 +238,7 @@ const getTrendColor = (current: number, previous: number) => {
       <!-- Statistiques principales -->
       <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
         <!-- Total Commandes -->
-        <div class="stat-card bg-white rounded-xl shadow-lg overflow-hidden">
+        <div v-if="permissions.canViewCommandes" class="stat-card bg-white rounded-xl shadow-lg overflow-hidden">
           <div class="stat-content p-6">
             <div class="flex items-center">
               <div class="h-12 w-12 rounded-xl bg-gradient-to-r from-blue-500 to-blue-600 flex items-center justify-center shadow-lg">
@@ -249,7 +253,7 @@ const getTrendColor = (current: number, previous: number) => {
         </div>
 
         <!-- Total Livraisons -->
-        <div class="stat-card bg-white rounded-xl shadow-lg overflow-hidden">
+        <div v-if="permissions.canViewLivraisons" class="stat-card bg-white rounded-xl shadow-lg overflow-hidden">
           <div class="stat-content p-6">
             <div class="flex items-center">
               <div class="h-12 w-12 rounded-xl bg-gradient-to-r from-green-500 to-green-600 flex items-center justify-center shadow-lg">
@@ -264,7 +268,7 @@ const getTrendColor = (current: number, previous: number) => {
         </div>
 
         <!-- Total Productions -->
-        <div class="stat-card bg-white rounded-xl shadow-lg overflow-hidden">
+        <div v-if="permissions.canViewProduction" class="stat-card bg-white rounded-xl shadow-lg overflow-hidden">
           <div class="stat-content p-6">
             <div class="flex items-center">
               <div class="h-12 w-12 rounded-xl bg-gradient-to-r from-purple-500 to-purple-600 flex items-center justify-center shadow-lg">
@@ -279,7 +283,7 @@ const getTrendColor = (current: number, previous: number) => {
         </div>
 
         <!-- Chiffre d'Affaires -->
-        <div class="stat-card bg-white rounded-xl shadow-lg overflow-hidden">
+        <div v-if="permissions.canViewLivraisons" class="stat-card bg-white rounded-xl shadow-lg overflow-hidden">
           <div class="stat-content p-6">
             <div class="flex items-center">
               <div class="h-12 w-12 rounded-xl bg-gradient-to-r from-orange-500 to-orange-600 flex items-center justify-center shadow-lg">
@@ -297,7 +301,7 @@ const getTrendColor = (current: number, previous: number) => {
       <!-- Statistiques détaillées -->
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
         <!-- Statut des Livraisons -->
-        <div class="bg-white rounded-xl shadow-lg p-6">
+        <div v-if="permissions.canViewLivraisons" class="bg-white rounded-xl shadow-lg p-6">
           <h3 class="text-lg font-semibold text-gray-900 mb-4 flex items-center">
             <TruckIcon class="h-5 w-5 mr-2 text-green-600" />
             Statut des Livraisons
@@ -328,7 +332,7 @@ const getTrendColor = (current: number, previous: number) => {
         </div>
 
         <!-- Statut des Productions -->
-        <div class="bg-white rounded-xl shadow-lg p-6">
+        <div v-if="permissions.canViewProduction" class="bg-white rounded-xl shadow-lg p-6">
           <h3 class="text-lg font-semibold text-gray-900 mb-4 flex items-center">
             <CubeIcon class="h-5 w-5 mr-2 text-purple-600" />
             Statut des Productions
@@ -362,7 +366,7 @@ const getTrendColor = (current: number, previous: number) => {
       <!-- Graphiques et données récentes -->
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
         <!-- Bons de Livraison Récents -->
-        <div class="bg-white rounded-xl shadow-lg overflow-hidden">
+        <div v-if="permissions.canViewLivraisons" class="bg-white rounded-xl shadow-lg overflow-hidden">
           <div class="px-6 py-4 border-b border-gray-200">
             <h3 class="text-lg font-semibold text-gray-900 flex items-center">
               <DocumentTextIcon class="h-5 w-5 mr-2 text-orange-600" />
@@ -408,7 +412,7 @@ const getTrendColor = (current: number, previous: number) => {
         </div>
 
         <!-- Productions Récentes -->
-        <div class="bg-white rounded-xl shadow-lg overflow-hidden">
+        <div v-if="permissions.canViewProduction" class="bg-white rounded-xl shadow-lg overflow-hidden">
           <div class="px-6 py-4 border-b border-gray-200">
             <h3 class="text-lg font-semibold text-gray-900 flex items-center">
               <CubeIcon class="h-5 w-5 mr-2 text-purple-600" />
@@ -465,7 +469,7 @@ const getTrendColor = (current: number, previous: number) => {
         
         <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
           <!-- Chiffre d'Affaires du Mois -->
-          <div class="text-center">
+          <div v-if="permissions.canViewLivraisons" class="text-center">
             <div class="h-16 w-16 rounded-full bg-gradient-to-r from-orange-500 to-orange-600 flex items-center justify-center shadow-lg mx-auto mb-4">
               <CurrencyDollarIcon class="h-8 w-8 text-white" />
             </div>
@@ -474,7 +478,7 @@ const getTrendColor = (current: number, previous: number) => {
           </div>
 
           <!-- Taux de Livraison -->
-          <div class="text-center">
+          <div v-if="permissions.canViewLivraisons" class="text-center">
             <div class="h-16 w-16 rounded-full bg-gradient-to-r from-green-500 to-green-600 flex items-center justify-center shadow-lg mx-auto mb-4">
               <TruckIcon class="h-8 w-8 text-white" />
             </div>
@@ -485,7 +489,7 @@ const getTrendColor = (current: number, previous: number) => {
           </div>
 
           <!-- Taux de Production -->
-          <div class="text-center">
+          <div v-if="permissions.canViewProduction" class="text-center">
             <div class="h-16 w-16 rounded-full bg-gradient-to-r from-purple-500 to-purple-600 flex items-center justify-center shadow-lg mx-auto mb-4">
               <CubeIcon class="h-8 w-8 text-white" />
             </div>
