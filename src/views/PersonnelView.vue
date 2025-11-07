@@ -109,6 +109,22 @@ const predefinedRoles = [
   },
   {
     id: 3,
+    name: 'manager',
+    display_name: 'Manager',
+    description: 'Gestion générale avec accès à la plupart des modules',
+    permissions: ['dashboard.view', 'production.manage', 'logistics.manage', 'inventory.manage'],
+    color: 'purple'
+  },
+  {
+    id: 4,
+    name: 'operator',
+    display_name: 'Opérateur',
+    description: 'Accès en lecture à la plupart des modules',
+    permissions: ['dashboard.view', 'production.view', 'logistics.view', 'inventory.view'],
+    color: 'indigo'
+  },
+  {
+    id: 5,
     name: 'production_manager',
     display_name: 'Responsable Production',
     description: 'Gestion complète de la production',
@@ -116,7 +132,7 @@ const predefinedRoles = [
     color: 'blue'
   },
   {
-    id: 4,
+    id: 6,
     name: 'production_operator',
     display_name: 'Opérateur Production',
     description: 'Opérations de production',
@@ -124,7 +140,7 @@ const predefinedRoles = [
     color: 'green'
   },
   {
-    id: 5,
+    id: 7,
     name: 'logistics_manager',
     display_name: 'Responsable Logistique',
     description: 'Gestion des livraisons et logistique',
@@ -132,7 +148,7 @@ const predefinedRoles = [
     color: 'yellow'
   },
   {
-    id: 6,
+    id: 8,
     name: 'logistics_operator',
     display_name: 'Opérateur Logistique',
     description: 'Opérations de livraison',
@@ -140,7 +156,7 @@ const predefinedRoles = [
     color: 'indigo'
   },
   {
-    id: 7,
+    id: 9,
     name: 'inventory_manager',
     display_name: 'Responsable Inventaire',
     description: 'Gestion des stocks et inventaire',
@@ -148,7 +164,7 @@ const predefinedRoles = [
     color: 'purple'
   },
   {
-    id: 8,
+    id: 10,
     name: 'viewer',
     display_name: 'Consultant',
     description: 'Accès en lecture seule',
@@ -218,11 +234,14 @@ const loadUsers = async () => {
 
 const loadRoles = async () => {
   try {
-    roles.value = await getRoles()
+    const rolesFromAPI = await getRoles()
+    console.log('✅ [PersonnelView] Rôles chargés depuis l\'API:', rolesFromAPI)
+    roles.value = rolesFromAPI
   } catch (error) {
-    console.error('Erreur lors du chargement des rôles:', error)
+    console.error('❌ [PersonnelView] Erreur lors du chargement des rôles:', error)
     // Utiliser les rôles prédéfinis si l'API échoue
     roles.value = predefinedRoles
+    console.warn('⚠️ [PersonnelView] Utilisation des rôles prédéfinis')
   }
 }
 
@@ -840,14 +859,16 @@ const copyToClipboard = (text: string) => {
                     required
                     class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
                   >
+                    <option value="">Sélectionner un rôle</option>
                     <option
-                      v-for="role in predefinedRoles"
-                      :key="role.name"
+                      v-for="role in roles"
+                      :key="role.id || role.name"
                       :value="role.name"
                     >
-                      {{ role.display_name }}
+                      {{ role.display_name || role.name }}
                     </option>
                   </select>
+                  <p v-if="roles.length === 0" class="mt-1 text-sm text-gray-500">Chargement des rôles...</p>
                 </div>
 
                 <!-- Mot de passe (seulement pour nouveau utilisateur) -->
