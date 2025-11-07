@@ -18,7 +18,8 @@ import {
   BuildingOfficeIcon,
   TagIcon,
   DocumentTextIcon,
-  ChartBarIcon
+  ChartBarIcon,
+  ArrowDownTrayIcon
 } from '@heroicons/vue/24/outline'
 
 // Types pour les ciments et adjuvants
@@ -67,7 +68,7 @@ interface Adjuvant {
   updated_at?: string
 }
 
-const { getCiments, addCiment, updateCiment, deleteCiment, getAdjuvants, addAdjuvant, updateAdjuvant, deleteAdjuvant } = useLaravelApi()
+const { getCiments, addCiment, updateCiment, deleteCiment, getAdjuvants, addAdjuvant, updateAdjuvant, deleteAdjuvant, updateCimentStock, updateAdjuvantStock } = useLaravelApi()
 const { success, error, warning, info, confirmDialog } = useAlert()
 
 // Permissions
@@ -80,6 +81,15 @@ const adjuvants = ref<Adjuvant[]>([])
 const showModal = ref(false)
 const editingItem = ref<Ciment | Adjuvant | null>(null)
 const isEditing = ref(false)
+
+// Modal de réception de stock
+const showReceptionModal = ref(false)
+const receptionItem = ref<Ciment | Adjuvant | null>(null)
+const receptionData = ref({
+  quantite: 0,
+  motif: 'Réception de stock',
+  notes: ''
+})
 
 // Filtres
 const searchQuery = ref('')
@@ -242,6 +252,62 @@ const deleteItem = async (item: Ciment | Adjuvant) => {
   } catch (err) {
     console.error('❌ [MateriauxView] Erreur lors de la suppression:', err)
     await error('Erreur lors de la suppression')
+  }
+}
+
+// Réception de stock
+const openReceptionModal = (item: Ciment | Adjuvant) => {
+  receptionItem.value = item
+  receptionData.value = {
+    quantite: 0,
+    motif: 'Réception de stock',
+    notes: ''
+  }
+  showReceptionModal.value = true
+}
+
+const closeReceptionModal = () => {
+  showReceptionModal.value = false
+  receptionItem.value = null
+  receptionData.value = {
+    quantite: 0,
+    motif: 'Réception de stock',
+    notes: ''
+  }
+}
+
+const saveReception = async () => {
+  if (!receptionItem.value || receptionData.value.quantite <= 0) {
+    await warning('Veuillez saisir une quantité valide')
+    return
+  }
+
+  try {
+    if (activeTab.value === 'ciments') {
+      await updateCimentStock(
+        receptionItem.value.id!,
+        'ajout',
+        receptionData.value.quantite,
+        receptionData.value.motif,
+        receptionData.value.notes
+      )
+      await success(`Stock de ${receptionItem.value.nom} mis à jour avec succès (+${receptionData.value.quantite} ${receptionItem.value.unite})`)
+      await loadCiments()
+    } else {
+      await updateAdjuvantStock(
+        receptionItem.value.id!,
+        'ajout',
+        receptionData.value.quantite,
+        receptionData.value.motif,
+        receptionData.value.notes
+      )
+      await success(`Stock de ${receptionItem.value.nom} mis à jour avec succès (+${receptionData.value.quantite} ${receptionItem.value.unite})`)
+      await loadAdjuvants()
+    }
+    closeReceptionModal()
+  } catch (err: any) {
+    console.error('❌ [MateriauxView] Erreur lors de la réception:', err)
+    await error(err.response?.data?.error || 'Erreur lors de la réception de stock')
   }
 }
 
@@ -553,8 +619,16 @@ const formatDate = (dateString: string) => {
               </div>
               <div class="flex space-x-2">
                 <button
+                  @click="openReceptionModal(ciment)"
+                  class="p-2 text-gray-400 hover:text-green-500 transition-colors"
+                  title="Réceptionner du stock"
+                >
+                  <ArrowDownTrayIcon class="h-4 w-4" />
+                </button>
+                <button
                   @click="openModal(ciment)"
                   class="p-2 text-gray-400 hover:text-orange-500 transition-colors"
+                  title="Modifier"
                 >
                   <PencilIcon class="h-4 w-4" />
                 </button>
@@ -562,6 +636,7 @@ const formatDate = (dateString: string) => {
                   v-if="canDeleteStock"
                   @click="deleteItem(ciment)"
                   class="p-2 text-gray-400 hover:text-red-500 transition-colors"
+                  title="Supprimer"
                 >
                   <TrashIcon class="h-4 w-4" />
                 </button>
@@ -624,8 +699,16 @@ const formatDate = (dateString: string) => {
               </div>
               <div class="flex space-x-2">
                 <button
+                  @click="openReceptionModal(adjuvant)"
+                  class="p-2 text-gray-400 hover:text-green-500 transition-colors"
+                  title="Réceptionner du stock"
+                >
+                  <ArrowDownTrayIcon class="h-4 w-4" />
+                </button>
+                <button
                   @click="openModal(adjuvant)"
                   class="p-2 text-gray-400 hover:text-orange-500 transition-colors"
+                  title="Modifier"
                 >
                   <PencilIcon class="h-4 w-4" />
                 </button>
@@ -633,6 +716,7 @@ const formatDate = (dateString: string) => {
                   v-if="canDeleteStock"
                   @click="deleteItem(adjuvant)"
                   class="p-2 text-gray-400 hover:text-red-500 transition-colors"
+                  title="Supprimer"
                 >
                   <TrashIcon class="h-4 w-4" />
                 </button>
@@ -857,6 +941,92 @@ const formatDate = (dateString: string) => {
             >
               {{ isEditing ? 'Modifier' : 'Ajouter' }}
             </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal de réception de stock -->
+    <div
+      v-if="showReceptionModal && receptionItem"
+      class="fixed inset-0 z-50 overflow-y-auto"
+      @click.self="closeReceptionModal"
+    >
+      <div class="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
+        <div class="fixed inset-0 transition-opacity bg-gray-500 bg-opacity-75" @click="closeReceptionModal"></div>
+
+        <div class="relative inline-block align-bottom bg-white rounded-xl text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
+          <!-- Header -->
+          <div class="bg-gradient-to-r from-green-500 to-green-600 px-6 py-4">
+            <h3 class="text-lg font-semibold text-white">
+              Réceptionner du stock - {{ receptionItem.nom }}
+            </h3>
+            <p class="text-sm text-green-100 mt-1">
+              Stock actuel: {{ receptionItem.stock_actuel }} {{ receptionItem.unite }}
+            </p>
+          </div>
+
+          <!-- Contenu -->
+          <div class="px-6 py-6 bg-white">
+            <form @submit.prevent="saveReception" class="space-y-4">
+              <!-- Quantité -->
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">
+                  Quantité à réceptionner ({{ receptionItem.unite }}) *
+                </label>
+                <input
+                  v-model.number="receptionData.quantite"
+                  type="number"
+                  min="1"
+                  step="1"
+                  required
+                  placeholder="Ex: 100"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                />
+                <p class="mt-1 text-sm text-gray-500">
+                  Nouveau stock après réception: {{ (receptionItem.stock_actuel || 0) + (receptionData.quantite || 0) }} {{ receptionItem.unite }}
+                </p>
+              </div>
+
+              <!-- Motif -->
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">Motif</label>
+                <input
+                  v-model="receptionData.motif"
+                  type="text"
+                  placeholder="Ex: Réception de stock, Commande fournisseur"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                />
+              </div>
+
+              <!-- Notes -->
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">Notes (optionnel)</label>
+                <textarea
+                  v-model="receptionData.notes"
+                  rows="3"
+                  placeholder="Informations supplémentaires..."
+                  class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                ></textarea>
+              </div>
+
+              <!-- Actions -->
+              <div class="flex justify-end space-x-3 pt-4">
+                <button
+                  type="button"
+                  @click="closeReceptionModal"
+                  class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                >
+                  Annuler
+                </button>
+                <button
+                  type="submit"
+                  class="px-4 py-2 text-sm font-medium text-white bg-gradient-to-r from-green-500 to-green-600 rounded-lg hover:from-green-600 hover:to-green-700 transition-colors"
+                >
+                  Réceptionner
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       </div>

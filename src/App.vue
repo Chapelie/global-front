@@ -42,8 +42,8 @@ const navigationItems = [
   { name: 'Production', href: '/production', icon: CubeIcon, permission: 'canViewProduction' },
   { name: 'Livraison', href: '/livraison', icon: TruckIcon, permission: 'canViewLivraisons' },
   { name: 'Stock', href: '/stock', icon: ArchiveBoxIcon, permission: 'canViewStock' },
-  { name: 'Matériaux', href: '/materiaux', icon: TagIcon, permission: 'canViewStock' },
-  { name: 'Documents', href: '/documents', icon: DocumentTextIcon, permission: 'canViewLivraisons' },
+  { name: 'Matériaux', href: '/materiaux', icon: TagIcon, permission: 'canViewStock' }, // Matériaux utilise canViewStock
+  { name: 'Documents', href: '/documents', icon: DocumentTextIcon, permission: 'canViewLivraisons' }, // Documents utilise canViewLivraisons
   { name: 'Personnel', href: '/personnel', icon: UsersIcon, permission: 'canViewPersonnel' },
   { name: 'Analyses', href: '/analyses', icon: ChartBarIcon, permission: 'canViewAnalyses' },
   { name: 'Paramètres', href: '/parametres', icon: Cog6ToothIcon, permission: 'canViewParametres' },
