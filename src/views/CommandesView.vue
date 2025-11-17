@@ -185,12 +185,17 @@ const handleDeleteCommande = async (id: number) => {
   if (confirm('Êtes-vous sûr de vouloir supprimer cette commande ?')) {
     try {
       console.log('🔍 [CommandesView] Suppression de la commande:', id)
-      await deleteCommande(id)
-      await loadCommandes()
-      console.log('✅ [CommandesView] Commande supprimée')
+      const success = await deleteCommande(id)
+      if (success) {
+        await loadCommandes()
+        console.log('✅ [CommandesView] Commande supprimée')
+        alert('Commande supprimée avec succès')
+      } else {
+        alert('Erreur lors de la suppression de la commande')
+      }
     } catch (error) {
       console.error('❌ [CommandesView] Erreur lors de la suppression:', error)
-      alert('Erreur lors de la suppression de la commande')
+      alert('Erreur lors de la suppression de la commande: ' + (error instanceof Error ? error.message : 'Erreur inconnue'))
     }
   }
 }

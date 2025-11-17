@@ -44,6 +44,16 @@ setTimeout(async () => {
     await init()
     console.log('✅ Authentification Laravel initialisée')
 
+    // Initialiser les notifications push
+    try {
+      const { useNotificationService } = await import('./services/notificationService')
+      const notificationService = useNotificationService()
+      await notificationService.initialize()
+      console.log('✅ Service de notifications initialisé')
+    } catch (error) {
+      console.error('❌ Erreur lors de l\'initialisation des notifications:', error)
+    }
+
     // Mode Laravel avec Sanctum
     console.log('✅ Mode Laravel avec Sanctum - authentification par token')
   } catch (error) {

@@ -96,7 +96,7 @@ const openModal = (article?: LaravelArticle) => {
 const saveArticle = async () => {
   try {
     if (editingArticle.value) {
-      await updateArticle(editingArticle.value.id, {
+      const updated = await updateArticle(editingArticle.value.id, {
         nom: newArticle.value.nom,
         stock: newArticle.value.stock,
         seuil_critique: newArticle.value.seuil_critique,
@@ -104,8 +104,16 @@ const saveArticle = async () => {
         prix: newArticle.value.prix,
         notes: newArticle.value.notes
       })
+      if (updated) {
+        await loadArticles()
+        showModal.value = false
+        editingArticle.value = null
+        alert('Article modifié avec succès')
+      } else {
+        alert('Erreur lors de la modification de l\'article')
+      }
     } else {
-      await addArticle({
+      const created = await addArticle({
         nom: newArticle.value.nom,
         stock: newArticle.value.stock,
         seuil_critique: newArticle.value.seuil_critique,
@@ -120,24 +128,35 @@ const saveArticle = async () => {
         qualite: 'standard',
         actif: true
       })
+      if (created) {
+        await loadArticles()
+        showModal.value = false
+        editingArticle.value = null
+        alert('Article créé avec succès')
+      } else {
+        alert('Erreur lors de la création de l\'article')
+      }
     }
-    await loadArticles()
-    showModal.value = false
-    editingArticle.value = null
   } catch (error) {
     console.error('Erreur lors de la sauvegarde:', error)
-    alert('Erreur lors de la sauvegarde de l\'article')
+    alert('Erreur lors de la sauvegarde de l\'article: ' + (error instanceof Error ? error.message : 'Erreur inconnue'))
   }
 }
 
-const handleDeleteArticle = async (id: string) => {
+const handleDeleteArticle = async (id: number | string) => {
   if (confirm('Êtes-vous sûr de vouloir supprimer cet article ?')) {
     try {
-      await deleteArticle(Number(id))
-      await loadArticles()
+      const articleId = typeof id === 'string' ? Number(id) : id
+      const success = await deleteArticle(articleId)
+      if (success) {
+        await loadArticles()
+        alert('Article supprimé avec succès')
+      } else {
+        alert('Erreur lors de la suppression de l\'article')
+      }
     } catch (error) {
       console.error('Erreur lors de la suppression:', error)
-      alert('Erreur lors de la suppression de l\'article')
+      alert('Erreur lors de la suppression de l\'article: ' + (error instanceof Error ? error.message : 'Erreur inconnue'))
     }
   }
 }
@@ -145,11 +164,16 @@ const handleDeleteArticle = async (id: string) => {
 const ajusterStock = async (article: any, quantite: number) => {
   try {
     const newStock = Math.max(0, article.stock + quantite)
-    await updateArticle(article.id!, { stock: newStock })
-    await loadArticles()
+    const updated = await updateArticle(article.id!, { stock: newStock })
+    if (updated) {
+      await loadArticles()
+      console.log(`✅ Stock ajusté: ${article.stock} → ${newStock}`)
+    } else {
+      alert('Erreur lors de l\'ajustement du stock')
+    }
   } catch (error) {
     console.error('Erreur lors de l\'ajustement du stock:', error)
-    alert('Erreur lors de l\'ajustement du stock')
+    alert('Erreur lors de l\'ajustement du stock: ' + (error instanceof Error ? error.message : 'Erreur inconnue'))
   }
 }
 
@@ -420,7 +444,7 @@ onMounted(async () => {
               </button>
               <button
                 v-if="canDeleteStock"
-                @click="deleteArticle(article.id)"
+                @click="handleDeleteArticle(article.id)"
                 class="h-10 w-10 rounded-xl bg-gray-100 hover:bg-red-100 text-gray-600 hover:text-red-600 flex items-center justify-center transition-all duration-200 hover:scale-110"
                 title="Supprimer"
               >

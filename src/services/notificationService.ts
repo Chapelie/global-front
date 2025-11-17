@@ -48,12 +48,124 @@ class NotificationService {
       // Initialiser les notifications push natives si sur mobile
       if (Capacitor.isNativePlatform()) {
         await this.initializePushNotifications()
+      } else {
+        // Initialiser les notifications push pour le navigateur (Web Push API)
+        await this.initializeWebPushNotifications()
       }
 
       this.isInitialized.value = true
     } catch (error) {
       console.error('Erreur lors de l\'initialisation des notifications:', error)
     }
+  }
+
+  /**
+   * Initialiser les notifications push pour le navigateur (Web Push API)
+   */
+  private async initializeWebPushNotifications(): Promise<void> {
+    try {
+      // Vérifier si le navigateur supporte les notifications
+      if (!('Notification' in window) || !('serviceWorker' in navigator)) {
+        console.warn('Ce navigateur ne supporte pas les notifications push')
+        return
+      }
+
+      // Demander la permission
+      let permission = Notification.permission
+      if (permission === 'default') {
+        permission = await Notification.requestPermission()
+      }
+
+      if (permission !== 'granted') {
+        console.warn('Permission de notifications refusée')
+        return
+      }
+
+      // Enregistrer le service worker
+      const registration = await navigator.serviceWorker.register('/sw.js', {
+        scope: '/'
+      })
+
+      // Obtenir la subscription
+      const subscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: this.urlBase64ToUint8Array(await this.getVapidPublicKey())
+      })
+
+      // Enregistrer la subscription sur le backend
+      await this.registerWebPushSubscription(subscription)
+      
+      console.log('✅ Notifications Web Push initialisées')
+    } catch (error) {
+      console.error('Erreur lors de l\'initialisation des notifications Web Push:', error)
+    }
+  }
+
+  /**
+   * Obtenir la clé publique VAPID depuis le backend
+   */
+  private async getVapidPublicKey(): Promise<string> {
+    try {
+      const response = await this.api.api.get('/notifications/vapid-public-key')
+      return response.data?.public_key || ''
+    } catch (error) {
+      console.error('Erreur lors de la récupération de la clé VAPID:', error)
+      return ''
+    }
+  }
+
+  /**
+   * Convertir une clé base64 en Uint8Array
+   */
+  private urlBase64ToUint8Array(base64String: string): Uint8Array {
+    const padding = '='.repeat((4 - base64String.length % 4) % 4)
+    const base64 = (base64String + padding)
+      .replace(/\-/g, '+')
+      .replace(/_/g, '/')
+
+    const rawData = window.atob(base64)
+    const outputArray = new Uint8Array(rawData.length)
+
+    for (let i = 0; i < rawData.length; ++i) {
+      outputArray[i] = rawData.charCodeAt(i)
+    }
+    return outputArray
+  }
+
+  /**
+   * Enregistrer la subscription Web Push sur le backend
+   */
+  private async registerWebPushSubscription(subscription: PushSubscription): Promise<void> {
+    try {
+      const subscriptionData = {
+        endpoint: subscription.endpoint,
+        keys: {
+          p256dh: this.arrayBufferToBase64(subscription.getKey('p256dh')!),
+          auth: this.arrayBufferToBase64(subscription.getKey('auth')!)
+        }
+      }
+
+      await this.api.api.post('/notifications/register-web-push', {
+        subscription: subscriptionData,
+        device_type: 'web'
+      })
+      
+      console.log('✅ Subscription Web Push enregistrée sur le backend')
+    } catch (error) {
+      console.error('Erreur lors de l\'enregistrement de la subscription Web Push:', error)
+    }
+  }
+
+  /**
+   * Convertir un ArrayBuffer en base64
+   */
+  private arrayBufferToBase64(buffer: ArrayBuffer): string {
+    const bytes = new Uint8Array(buffer)
+    let binary = ''
+    for (let i = 0; i < bytes.byteLength; i++) {
+      binary += String.fromCharCode(bytes[i])
+    }
+    return window.btoa(binary)
   }
 
   /**

@@ -534,15 +534,15 @@ const saveProduction = async () => {
       return
     }
 
-    // Valider que le ciment est sélectionné
-    if (!newProduction.value.ciment_id || !newProduction.value.quantite_ciment_sacs || newProduction.value.quantite_ciment_sacs < 1) {
-      alert('Veuillez sélectionner un ciment et spécifier la quantité en sacs')
+    // Le ciment est optionnel, mais si un ciment est sélectionné, la quantité doit être valide
+    if (newProduction.value.ciment_id && (!newProduction.value.quantite_ciment_sacs || newProduction.value.quantite_ciment_sacs < 1)) {
+      alert('Si un ciment est sélectionné, veuillez spécifier une quantité valide en sacs')
       return
     }
 
-    // Valider que l'adjuvant est sélectionné
-    if (!newProduction.value.adjuvant_id || !newProduction.value.quantite_adjuvant_litres || newProduction.value.quantite_adjuvant_litres < 1) {
-      alert('Veuillez sélectionner un adjuvant et spécifier la quantité en litres')
+    // Les adjuvants sont optionnels, mais si un adjuvant est sélectionné, la quantité doit être valide
+    if (newProduction.value.adjuvant_id && (!newProduction.value.quantite_adjuvant_litres || newProduction.value.quantite_adjuvant_litres < 1)) {
+      alert('Si un adjuvant est sélectionné, veuillez spécifier une quantité valide en litres')
       return
     }
 
@@ -561,16 +561,24 @@ const saveProduction = async () => {
     }
 
     // Mapper les données frontend vers le format backend
-    const productionData = {
+    const productionData: any = {
       product_id: selectedArticle.id,
       quantity: newProduction.value.articlesProduits[0].quantiteProduite || 1,
       production_date: productionDate.toISOString().split('T')[0], // Format YYYY-MM-DD
       status: newProduction.value.statut,
-      notes: newProduction.value.lotId ? `Lot ID: ${newProduction.value.lotId}` : undefined,
-      ciment_id: newProduction.value.ciment_id,
-      quantite_ciment_sacs: newProduction.value.quantite_ciment_sacs,
-      adjuvant_id: newProduction.value.adjuvant_id,
-      quantite_adjuvant_litres: newProduction.value.quantite_adjuvant_litres
+      notes: newProduction.value.lotId ? `Lot ID: ${newProduction.value.lotId}` : undefined
+    }
+
+    // Ajouter le ciment seulement s'il est fourni
+    if (newProduction.value.ciment_id && newProduction.value.quantite_ciment_sacs && newProduction.value.quantite_ciment_sacs > 0) {
+      productionData.ciment_id = newProduction.value.ciment_id
+      productionData.quantite_ciment_sacs = newProduction.value.quantite_ciment_sacs
+    }
+
+    // Ajouter les adjuvants seulement s'ils sont fournis
+    if (newProduction.value.adjuvant_id && newProduction.value.quantite_adjuvant_litres && newProduction.value.quantite_adjuvant_litres > 0) {
+      productionData.adjuvant_id = newProduction.value.adjuvant_id
+      productionData.quantite_adjuvant_litres = newProduction.value.quantite_adjuvant_litres
     }
 
     console.log('🔍 [ProductionView] Données mappées:', productionData)

@@ -297,6 +297,7 @@ class LaravelApiService {
   updateArticle = async (id: number, articleData: Partial<LaravelArticle>): Promise<LaravelArticle | null> => {
     try {
       const response = await this.api.put<LaravelArticle>(this.api.endpoints.articles.update(id), articleData)
+      console.log('✅ Article mis à jour avec succès:', id)
       return response.data || null
     } catch (error) {
       this.api.debugError(`Erreur lors de la mise à jour de l'article ${id}:`, error)
@@ -306,11 +307,12 @@ class LaravelApiService {
 
   deleteArticle = async (id: number): Promise<boolean> => {
     try {
-      await this.api.delete(this.api.endpoints.articles.destroy(id))
+      const response = await this.api.delete(this.api.endpoints.articles.destroy(id))
+      console.log('✅ Article supprimé avec succès:', id)
       return true
     } catch (error) {
       this.api.debugError(`Erreur lors de la suppression de l'article ${id}:`, error)
-      return false
+      throw error // Lancer l'erreur pour que le frontend puisse la gérer
     }
   }
 
@@ -503,11 +505,12 @@ class LaravelApiService {
 
   deleteCommande = async (id: number): Promise<boolean> => {
     try {
-      await this.api.delete(`/orders/${id}`)
+      const response = await this.api.delete(`/orders/${id}`)
+      console.log('✅ Commande supprimée avec succès:', id)
       return true
     } catch (error) {
-      console.error(`Erreur lors de la suppression de la commande ${id}:`, error)
-      return false
+      this.api.debugError(`Erreur lors de la suppression de la commande ${id}:`, error)
+      throw error // Lancer l'erreur pour que le frontend puisse la gérer
     }
   }
 
@@ -567,11 +570,12 @@ class LaravelApiService {
 
   deleteLivraison = async (id: number): Promise<boolean> => {
     try {
-      await this.api.delete(`/storage/livraisons/${id}`)
+      const response = await this.api.delete(`/storage/livraisons/${id}`)
+      console.log('✅ Livraison supprimée avec succès:', id)
       return true
     } catch (error) {
-      console.error(`Erreur lors de la suppression de la livraison ${id}:`, error)
-      return false
+      this.api.debugError(`Erreur lors de la suppression de la livraison ${id}:`, error)
+      throw error // Lancer l'erreur pour que le frontend puisse la gérer
     }
   }
 
