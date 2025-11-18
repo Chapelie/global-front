@@ -39,3 +39,4 @@ self.addEventListener('notificationclose', function(event) {
   console.log('❌ Notification fermée:', event)
 })
 
+

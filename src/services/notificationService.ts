@@ -173,30 +173,44 @@ class NotificationService {
    */
   private async initializePushNotifications(): Promise<void> {
     try {
+      console.log('🔔 Initialisation des notifications push Capacitor...')
+      
       // Demander les permissions
       let permStatus = await PushNotifications.checkPermissions()
+      console.log('📋 État des permissions:', permStatus)
       
       if (permStatus.receive === 'prompt') {
         permStatus = await PushNotifications.requestPermissions()
+        console.log('📋 Permissions demandées, nouvel état:', permStatus)
       }
 
       if (permStatus.receive !== 'granted') {
-        console.warn('Permissions de notifications refusées')
+        console.warn('⚠️ Permissions de notifications refusées:', permStatus)
         return
       }
 
+      console.log('✅ Permissions accordées, enregistrement du service push...')
+      
       // S'enregistrer pour les notifications push
       await PushNotifications.register()
+      console.log('✅ Service push enregistré, attente du token...')
 
       // Écouter les événements
       PushNotifications.addListener('registration', async (token) => {
-        console.log('📱 Token push enregistré:', token.value)
+        console.log('📱 Token push reçu:', token.value)
+        console.log('📱 Longueur du token:', token.value?.length)
         this.pushToken = token.value
-        await this.registerDeviceToken(token.value)
+        try {
+          await this.registerDeviceToken(token.value)
+          console.log('✅ Token enregistré avec succès sur le backend')
+        } catch (error) {
+          console.error('❌ Erreur lors de l\'enregistrement du token:', error)
+        }
       })
 
       PushNotifications.addListener('registrationError', (error) => {
-        console.error('Erreur d\'enregistrement push:', error)
+        console.error('❌ Erreur d\'enregistrement push:', error)
+        console.error('❌ Détails de l\'erreur:', JSON.stringify(error, null, 2))
       })
 
       PushNotifications.addListener('pushNotificationReceived', (notification) => {
@@ -212,8 +226,12 @@ class NotificationService {
           window.location.href = notification.notification.data.action_url
         }
       })
+      
+      console.log('✅ Écouteurs d\'événements push configurés')
     } catch (error) {
-      console.error('Erreur lors de l\'initialisation des notifications push:', error)
+      console.error('❌ Erreur lors de l\'initialisation des notifications push:', error)
+      console.error('❌ Détails:', error instanceof Error ? error.message : String(error))
+      console.error('❌ Stack:', error instanceof Error ? error.stack : 'N/A')
     }
   }
 
@@ -225,14 +243,26 @@ class NotificationService {
       const deviceType = Capacitor.getPlatform() === 'android' ? 'android' : 
                         Capacitor.getPlatform() === 'ios' ? 'ios' : 'web'
       
-      await this.api.api.post('/notifications/register-device', {
+      console.log('📤 Envoi du token au backend...', {
+        deviceType,
+        tokenLength: token.length,
+        tokenPreview: token.substring(0, 20) + '...'
+      })
+      
+      const response = await this.api.api.post('/notifications/register-device', {
         device_token: token,
         device_type: deviceType
       })
       
-      console.log('✅ Token d\'appareil enregistré sur le backend')
-    } catch (error) {
-      console.error('Erreur lors de l\'enregistrement du token:', error)
+      console.log('✅ Token d\'appareil enregistré sur le backend', response.data)
+    } catch (error: any) {
+      console.error('❌ Erreur lors de l\'enregistrement du token:', error)
+      console.error('❌ Détails:', {
+        message: error?.message,
+        response: error?.response?.data,
+        status: error?.response?.status
+      })
+      throw error // Re-lancer l'erreur pour que l'appelant puisse la gérer
     }
   }
 
