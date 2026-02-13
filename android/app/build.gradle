@@ -25,8 +25,17 @@ android {
 
     buildTypes {
         release {
+            // ⚠️ IMPORTANT: Actuellement désactivé pour éviter le crash du plugin Push Notifications
+            // Une fois les règles ProGuard ajoutées dans proguard-rules.pro, tu peux réactiver :
+            // minifyEnabled true
             minifyEnabled false
+            shrinkResources false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            
+            // Pour réactiver minifyEnabled avec les règles ProGuard :
+            // 1. Change minifyEnabled false → true
+            // 2. Assure-toi que proguard-rules.pro contient les règles pour Capacitor et Push Notifications
+            // 3. Rebuild: ./gradlew clean assembleRelease
         }
     }
 }

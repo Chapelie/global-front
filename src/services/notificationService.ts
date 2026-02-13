@@ -175,13 +175,33 @@ class NotificationService {
     try {
       console.log('🔔 Initialisation des notifications push Capacitor...')
       
-      // Demander les permissions
-      let permStatus = await PushNotifications.checkPermissions()
-      console.log('📋 État des permissions:', permStatus)
+      // ⚠️ IMPORTANT: Attendre que Capacitor soit complètement initialisé
+      // Cela évite le crash NullPointerException lors du build release avec R8
+      // Attendre au moins 1 seconde pour que toutes les classes soient chargées
+      await new Promise(resolve => setTimeout(resolve, 1000))
+      
+      console.log('⏳ Vérification des permissions push...')
+      
+      // Demander les permissions (maintenant que Capacitor est prêt)
+      // ⚠️ Try-catch pour éviter le crash si R8 a supprimé des classes
+      let permStatus
+      try {
+        permStatus = await PushNotifications.checkPermissions()
+        console.log('📋 État des permissions:', permStatus)
+      } catch (error) {
+        console.error('❌ Erreur lors de la vérification des permissions push:', error)
+        console.warn('⚠️ Les notifications push ne seront pas disponibles')
+        return // Sortir silencieusement pour ne pas crasher l'app
+      }
       
       if (permStatus.receive === 'prompt') {
-        permStatus = await PushNotifications.requestPermissions()
-        console.log('📋 Permissions demandées, nouvel état:', permStatus)
+        try {
+          permStatus = await PushNotifications.requestPermissions()
+          console.log('📋 Permissions demandées, nouvel état:', permStatus)
+        } catch (error) {
+          console.error('❌ Erreur lors de la demande de permissions:', error)
+          return
+        }
       }
 
       if (permStatus.receive !== 'granted') {

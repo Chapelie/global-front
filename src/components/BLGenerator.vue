@@ -365,6 +365,19 @@ const generatePDF = async () => {
   }
 }
 
+const blobToBase64 = (blob: Blob): Promise<string> =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onloadend = () => {
+      const result = reader.result as string
+      // Retirer le préfixe data:...;base64, pour n'envoyer que la chaîne base64
+      const base64 = result.includes(',') ? result.split(',')[1] : result
+      resolve(base64)
+    }
+    reader.onerror = reject
+    reader.readAsDataURL(blob)
+  })
+
 const saveToDocuments = async () => {
   if (!pdfBlob.value) {
     console.error('❌ [BLGenerator] Aucun PDF à sauvegarder')
@@ -379,6 +392,9 @@ const saveToDocuments = async () => {
     const fileName = `BL_${props.livraison.numeroBl}_${new Date().toISOString().split('T')[0]}.pdf`
     console.log('📁 [BLGenerator] Nom du fichier:', fileName)
     
+    // Convertir le Blob en base64 (le backend attend une chaîne, pas un Blob)
+    const contenuBase64 = await blobToBase64(pdfBlob.value)
+    
     // Ajouter le document
     const documentData = {
       nom: `Bon de Livraison ${props.livraison.numeroBl}`,
@@ -386,11 +402,11 @@ const saveToDocuments = async () => {
       description: `Bon de livraison pour la commande ${props.livraison.numeroBl}`,
       taille: pdfBlob.value.size,
       url: '',
-      contenu: pdfBlob.value,
+      contenu: contenuBase64,
       fileName: fileName
     }
     
-    console.log('📤 [BLGenerator] Envoi vers Supabase...', documentData)
+    console.log('📤 [BLGenerator] Envoi vers l\'API...', { ...documentData, contenu: '[base64...]' })
     const result = await addDocument(documentData)
     console.log('✅ [BLGenerator] BL sauvegardé dans les documents:', result)
     
