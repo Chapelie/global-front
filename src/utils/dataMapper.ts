@@ -61,6 +61,21 @@ export function mapProductionData(production: any): any {
 }
 
 /**
+ * Mapper le statut backend (ProductionBatch) vers le statut frontend
+ * Backend: en_production, en_sechage, pret_a_vendre, termine
+ * Frontend: en_attente, en_cours, termine, annule
+ */
+function mapBackendStatusToFrontend(status: string | undefined): string {
+  const map: Record<string, string> = {
+    'en_production': 'en_cours',
+    'en_sechage': 'en_cours',
+    'pret_a_vendre': 'termine',
+    'termine': 'termine'
+  }
+  return status ? (map[status] || status) : 'en_attente'
+}
+
+/**
  * Mapper pour ProductionBatch (lots de production)
  * Différent de Production (sessions de production)
  */
@@ -110,7 +125,7 @@ export function mapProductionBatchData(batch: any): any {
     lotId: batch.batch_number || batch.lotId, // Utiliser batch_number comme lotId
     userId: batch.created_by || batch.userId,
     date: formattedDate, // Pour le frontend
-    statut: batch.status || 'en_attente', // Mapper status vers statut
+    statut: mapBackendStatusToFrontend(batch.status), // Mapper status backend vers statut frontend
     articlesProduits: articlesProduits, // Articles produits avec quantités
     quantite_ciment: batch.quantite_ciment || 0, // Pourrait être dans les relations
     quantite_adjuvant: batch.quantite_adjuvant || 0, // Pourrait être dans les relations
