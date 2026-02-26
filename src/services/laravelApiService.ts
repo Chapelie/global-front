@@ -318,10 +318,11 @@ class LaravelApiService {
 
   async updateArticleStock(id: number, stock: number): Promise<LaravelArticle | null> {
     try {
-      const response = await this.api.patch<{ data: LaravelArticle }>(`/articles/${id}/stock`, { stock })
-      return response.data.data || null
+      const response = await this.api.patch<LaravelArticle>(this.api.endpoints.articles.updateStock(id), { stock })
+      // ApiConfig retourne { data: article } quand l'API renvoie { success, data: article }
+      return response.data || null
     } catch (error) {
-      console.error(`Erreur lors de la mise à jour du stock de l'article ${id}:`, error)
+      this.api.debugError(`Erreur lors de la mise à jour du stock de l'article ${id}:`, error)
       throw error
     }
   }

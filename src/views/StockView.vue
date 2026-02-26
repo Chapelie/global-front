@@ -19,7 +19,7 @@ import { useRoles } from '../services/roles'
 // import SyncStatus from '../components/SyncStatus.vue'
 
 const articles = ref<LaravelArticle[]>([])
-const { getArticles, addArticle, updateArticle, deleteArticle,  } = useLaravelApi()
+const { getArticles, addArticle, updateArticle, updateArticleStock, deleteArticle } = useLaravelApi()
 
 // Permissions
 const { canDeleteStock } = useRoles()
@@ -164,7 +164,7 @@ const handleDeleteArticle = async (id: number | string) => {
 const ajusterStock = async (article: any, quantite: number) => {
   try {
     const newStock = Math.max(0, article.stock + quantite)
-    const updated = await updateArticle(article.id!, { stock: newStock })
+    const updated = await updateArticleStock(article.id!, newStock)
     if (updated) {
       await loadArticles()
       console.log(`✅ Stock ajusté: ${article.stock} → ${newStock}`)
