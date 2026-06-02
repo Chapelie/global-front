@@ -6,8 +6,8 @@ self.addEventListener('push', function(event) {
   const title = data.title || 'Global Star Distribution'
   const options = {
     body: data.message || 'Nouvelle notification',
-    icon: '/logo.png',
-    badge: '/logo.png',
+    icon: '/icons/icon-192.webp',
+    badge: '/icons/icon-192.webp',
     tag: data.tag || 'notification',
     data: data.data || {},
     requireInteraction: data.requireInteraction || false,
