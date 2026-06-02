@@ -6,8 +6,8 @@ self.addEventListener('push', function(event) {
   const title = data.title || 'Global Star'
   const options = {
     body: data.message || 'Nouvelle notification',
-    icon: '/icons/icon-192.webp',
-    badge: '/icons/icon-192.webp',
+    icon: '/icons/icon-192.png',
+    badge: '/icons/icon-192.png',
     tag: data.tag || 'notification',
     data: data.data || {},
     requireInteraction: data.requireInteraction || false,
