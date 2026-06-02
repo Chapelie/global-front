@@ -6,6 +6,24 @@ import App from './App.vue'
 import router from './router'
 import './assets/main.css'
 import './initGlobals'
+import {
+  listenForServiceWorkerMessages,
+  registerBackgroundSync,
+  registerServiceWorker,
+} from './services/serviceWorker'
+
+if (!Capacitor.isNativePlatform()) {
+  registerServiceWorker()
+  registerBackgroundSync()
+  listenForServiceWorkerMessages((message) => {
+    if (message.type === 'SYNC_NOTIFICATIONS' || message.type === 'PERIODIC_SYNC_NOTIFICATIONS') {
+      void import('./services/notificationService').then(({ useNotificationService }) => {
+        const service = useNotificationService()
+        void service.loadNotifications()
+      })
+    }
+  })
+}
 
 // Initialiser l'application
 const app = createApp(App)

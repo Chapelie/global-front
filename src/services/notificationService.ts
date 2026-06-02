@@ -3,10 +3,11 @@
  * Gère les notifications backend et les notifications push natives via Capacitor
  */
 
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref } from 'vue'
 import { useLaravelApi } from './laravelApiService'
 import { PushNotifications } from '@capacitor/push-notifications'
 import { Capacitor } from '@capacitor/core'
+import { getServiceWorkerRegistration, registerBackgroundSync } from './serviceWorker'
 
 // Types
 export interface Notification {
@@ -81,10 +82,13 @@ class NotificationService {
         return
       }
 
-      // Enregistrer le service worker
-      const registration = await navigator.serviceWorker.register('/sw.js', {
-        scope: '/'
-      })
+      const registration = await getServiceWorkerRegistration()
+      if (!registration) {
+        console.warn('Service Worker non disponible pour Web Push')
+        return
+      }
+
+      await registerBackgroundSync()
 
       // Obtenir la subscription
       const subscription = await registration.pushManager.subscribe({
