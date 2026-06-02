@@ -27,7 +27,7 @@ setTimeout(async () => {
     if (Capacitor.isNativePlatform()) {
       // Configuration de la status bar
       await StatusBar.setStyle({ style: Style.Default })
-      await StatusBar.setBackgroundColor({ color: '#ffffff' })
+      await StatusBar.setBackgroundColor({ color: '#C98B3B' })
 
       // Masquer le splash screen
       await SplashScreen.hide()

@@ -1,8 +1,8 @@
 import { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'com.globalstar.distribution',
-  appName: 'Global Star Distribution',
+  appId: 'com.globalstar.app',
+  appName: 'Global Star',
   webDir: 'dist',
   server: {
     androidScheme: 'https'
@@ -10,12 +10,12 @@ const config: CapacitorConfig = {
   plugins: {
     StatusBar: {
       style: 'DEFAULT',
-      backgroundColor: '#ffffff',
+      backgroundColor: '#C98B3B',
       overlaysWebView: false
     },
     SplashScreen: {
       launchShowDuration: 2000,
-      backgroundColor: '#ffffff',
+      backgroundColor: '#FFFFFF',
       showSpinner: false
     },
     Keyboard: {
@@ -30,13 +30,13 @@ const config: CapacitorConfig = {
   ios: {
     contentInset: 'automatic',
     scrollEnabled: false,
-    backgroundColor: '#ffffff',
+    backgroundColor: '#FFFFFF',
     allowsLinkPreview: false,
     handleApplicationURL: false
   },
   android: {
     allowMixedContent: true,
-    backgroundColor: '#ffffff',
+    backgroundColor: '#FFFFFF',
     webContentsDebuggingEnabled: false
   },
 

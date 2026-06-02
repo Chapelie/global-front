@@ -3,7 +3,7 @@ self.addEventListener('push', function(event) {
   console.log('📬 Notification push reçue:', event)
   
   const data = event.data ? event.data.json() : {}
-  const title = data.title || 'Global Star Distribution'
+  const title = data.title || 'Global Star'
   const options = {
     body: data.message || 'Nouvelle notification',
     icon: '/icons/icon-192.webp',

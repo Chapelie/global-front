@@ -1,4 +1,4 @@
-package com.global.app;
+package com.globalstar.app;
 
 import com.getcapacitor.BridgeActivity;
 

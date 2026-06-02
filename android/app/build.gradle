@@ -2,11 +2,11 @@
 apply plugin: 'com.android.application'
 
 android {
-    namespace "com.global.app"
+    namespace "com.globalstar.app"
     compileSdk 34
 
     defaultConfig {
-        applicationId "com.global.app"
+        applicationId "com.globalstar.app"
         minSdk 24
         targetSdk 34
         versionCode 1
